@@ -4,13 +4,15 @@ from datetime import datetime
 from database import add_guild, get_guild
 
 
-with open("guilds.csv", encoding="utf-8") as file:
+with open("assets/guilds.csv", encoding="utf-8") as file:
     data = file.read()
 
 async def main():
     for line in data.split("\n"):
         try:
             guild_name, server_number = line.split(";")
+            if guild_name == "guild_name":
+                continue
         except ValueError:
             break
 
