@@ -1,20 +1,28 @@
-import discord
 import os
 import aiosqlite
-from dotenv import load_dotenv
+from datetime import datetime
+
+import discord
 from discord.ext import commands
-from database import init_db
+from discord import app_commands
+from dotenv import load_dotenv
 
-# Load environment variables
+from database import init_db, add_guild, DB_NAME
+
+
+class GuildIDTransformer(app_commands.Transformer):
+    async def transform(self, i: discord.Interaction, value: str) -> int:
+        return int(value)
+
+
 load_dotenv()
-TOKEN = os.getenv("DISCORD_TOKEN")
+TOKEN = os.getenv("TOKEN")
 
-# Set up intents
 intents = discord.Intents.default()
 intents.message_content = True
 
-# Create the bot client
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix=commands.when_mentioned, intents=intents)
+
 
 @bot.event
 async def on_ready():
@@ -22,27 +30,23 @@ async def on_ready():
     print("🗂️ Initializing database...")
     await init_db()
     print("✅ Database initialized.")
+
+
+@bot.command(name="sync")
+@commands.is_owner()
+async def sync(ctx):
     try:
         print("🔄 Attempting to sync slash commands globally...")
-        synced = await bot.tree.sync()  # No guild specified here => global commands
+        synced = await bot.tree.sync()
         print(f"✅ Synced {len(synced)} commands globally:")
         for cmd in synced:
             print(f" - {cmd.name}")
     except Exception as e:
         print(f"⚠️ Error syncing commands: {e}")
+    await ctx.send("Commands synced!")
 
-# Prefix command
-@bot.command(name="hello")
-async def hello(ctx):
-    await ctx.send("👋 Hello! This is a prefix command.")
 
-# Slash command: hello
-@bot.tree.command(name="hello", description="Say hello to the bot")
-async def slash_hello(interaction: discord.Interaction):
-    await interaction.response.send_message("👋 Hello! This is a slash command.")
-
-# Slash command: register_guild
-@bot.tree.command(name="register_guild", description="Register your guild and server")
+@bot.tree.command(description="Register your guild and server")
 async def register_guild(interaction: discord.Interaction, guild_name: str, server_number: str):
     if not interaction.user.guild_permissions.manage_guild:
         await interaction.response.send_message(
@@ -51,52 +55,57 @@ async def register_guild(interaction: discord.Interaction, guild_name: str, serv
         )
         return
 
-    async with aiosqlite.connect("hpn_bot.db") as db:
-        await db.execute(
-            """
-            INSERT OR REPLACE INTO guilds (guild_id, guild_name, server_number, registered_by)
-            VALUES (?, ?, ?, ?)
-            """,
-            (interaction.guild.id, guild_name, server_number, str(interaction.user))
-        )
-        await db.commit()
+    await add_guild(guild_name, server_number, interaction.user.id, interaction.user.display_name, datetime.now().strftime(format="%d/%m/%Y, %H:%M:%S"))
 
     await interaction.response.send_message(
         f"✅ Guild **{guild_name}** (Server {server_number}) registered successfully!"
     )
 
-# Slash command: register_member
-@bot.tree.command(name="register_member", description="Register yourself to a guild")
-async def register_member(interaction: discord.Interaction, guild_name: str, server_number: str):
-    # Verify guild exists
-    async with aiosqlite.connect("hpn_bot.db") as db:
+
+async def guild_name_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    choices = []
+    async with aiosqlite.connect(DB_NAME) as db:
         cursor = await db.execute(
-            "SELECT guild_id FROM guilds WHERE guild_name = ? AND server_number = ?",
-            (guild_name, server_number)
+            "SELECT id, guild_name, server_number FROM guilds WHERE guild_name LIKE ? LIMIT 25",
+            (f"%{current}%",)
+        )
+        rows = await cursor.fetchall()
+        for guild_id, guild_name, server_number in rows:
+            print(guild_id, type(guild_id))
+            choices.append(app_commands.Choice(name=f"{guild_name} (S{server_number})", value=int(guild_id)))
+    return choices
+
+
+@bot.tree.command(description="Register a member to a guild")
+@app_commands.describe(guild="Select the guild")
+@app_commands.autocomplete(guild=guild_name_autocomplete)
+async def register_member(interaction: discord.Interaction, guild: int, member: discord.Member):
+    print(guild, type(guild))
+    await interaction.response.defer()
+    async with aiosqlite.connect(DB_NAME) as db:
+        cursor = await db.execute(
+            "SELECT id, guild_name, server_number FROM guilds WHERE id = ?",
+            (guild)
         )
         row = await cursor.fetchone()
 
     if not row:
-        await interaction.response.send_message(
+        guild_id, guild_name, server_number = row
+        return await interaction.response.send_message(
             f"❌ Guild **{guild_name}** (Server {server_number}) not found. Please register your guild first.",
             ephemeral=True
         )
-        return
 
-    guild_id = row[0]
-
-    # Register member
-    async with aiosqlite.connect("hpn_bot.db") as db:
+    async with aiosqlite.connect(DB_NAME) as db:
         await db.execute(
             "INSERT OR REPLACE INTO members (member_id, username, guild_id) VALUES (?, ?, ?)",
-            (str(interaction.user.id), str(interaction.user), guild_id)
+            (member.id, member.display_name, guild_id)
         )
         await db.commit()
 
-    await interaction.response.send_message(
-        f"✅ {interaction.user.display_name}, you have been registered to guild **{guild_name}** (Server {server_number}).",
-        ephemeral=True
+    await interaction.followup.send(
+        f"✅ {member.mention}, you have been registered to guild **{guild_name}** (Server {server_number}).",
     )
 
-# Run the bot (last line)
+
 bot.run(TOKEN)
