@@ -1,6 +1,6 @@
 import aiosqlite
 
-DB_NAME = "hpn_bot.db"
+DB_NAME = "spacenations.xyz:3306"
 
 
 async def init_db():
