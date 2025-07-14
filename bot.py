@@ -1,9 +1,10 @@
+import asyncio
 import io
+import logging
 import os
 import re
 from datetime import datetime
 
-import aiosqlite
 import discord
 import pytesseract
 from discord import app_commands
@@ -11,8 +12,16 @@ from discord.ext import commands
 from dotenv import load_dotenv
 from PIL import Image
 
-from database import DB_NAME, add_guild, add_submission, init_db
+from database import (
+    add_guild,
+    add_member,
+    add_submission,
+    connect_db,
+    get_guild_by_id,
+    get_guilds_from_name,
+)
 
+logging.basicConfig()
 load_dotenv()
 
 TOKEN = os.getenv("TOKEN")
@@ -33,9 +42,6 @@ bot = commands.Bot(command_prefix=commands.when_mentioned, intents=intents)
 @bot.event
 async def on_ready():
     print(f"✅ {bot.user}: Bot started")
-    print("🗂️ Initializing database...")
-    await init_db()
-    print("✅ Database initialized.")
 
 
 @bot.command()
@@ -52,9 +58,7 @@ async def sync(ctx):
 
 
 @bot.tree.command(description="Register your guild and server")
-async def register_guild(
-    i: discord.Interaction, guild_name: str, server_number: str
-):
+async def register_guild(i: discord.Interaction, guild_name: str, server_number: str):
     if not i.user.guild_permissions.manage_guild:
         await i.response.send_message(
             "❌ You must have 'Manage Server' permission to register a guild.",
@@ -67,7 +71,7 @@ async def register_guild(
         server_number,
         i.user.id,
         i.user.display_name,
-        datetime.now().strftime(format="%d/%m/%Y, %H:%M:%S"),
+        datetime.now(),
     )
 
     await i.response.send_message(
@@ -79,34 +83,22 @@ async def guild_name_autocomplete(
     _: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
     choices = []
-    async with aiosqlite.connect(DB_NAME) as db:
-        cursor = await db.execute(
-            "SELECT id, guild_name, server_number FROM guilds WHERE guild_name LIKE ? LIMIT 25",
-            (f"%{current}%",),
-        )
-        rows = await cursor.fetchall()
-        for guild_id, guild_name, server_number in rows:
-            choices.append(
-                app_commands.Choice(
-                    name=f"{guild_name} (S{server_number})", value=str(guild_id)
-                )
+    guild_data = await get_guilds_from_name(current)
+    for guild_id, guild_name, server_number in guild_data:
+        choices.append(
+            app_commands.Choice(
+                name=f"{guild_name} (S{server_number})", value=str(guild_id)
             )
+        )
     return choices
 
 
 @bot.tree.command(description="Register a member to a guild")
 @app_commands.describe(guild="Select the guild")
 @app_commands.autocomplete(guild=guild_name_autocomplete)
-async def register_member(
-    i: discord.Interaction, guild: str, member: discord.Member
-):
-    print(guild, type(guild))
+async def register_member(i: discord.Interaction, guild: str, member: discord.Member):
     await i.response.defer()
-    async with aiosqlite.connect(DB_NAME) as db:
-        cursor = await db.execute(
-            "SELECT id, guild_name, server_number FROM guilds WHERE id = ?", (guild,)
-        )
-        row = await cursor.fetchone()
+    row = await get_guild_by_id(guild)
 
     if not row:
         return await i.followup.send(
@@ -115,12 +107,7 @@ async def register_member(
         )
     guild_id, guild_name, server_number = row
 
-    async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute(
-            "INSERT OR REPLACE INTO members (user_id, username, guild_id) VALUES (?, ?, ?)",
-            (member.id, member.display_name, guild_id),
-        )
-        await db.commit()
+    await add_member(member, guild_id)
 
     await i.followup.send(
         f"✅ {member.mention}, you have been registered to guild **{guild_name}** (Server {server_number}).",
@@ -160,13 +147,13 @@ async def extract_war_log(war):
     )
 
 
-async def extract_rewards(rewards):
-    rewards_image = Image.open(io.BytesIO(await rewards.read()))
+async def extract_league(league):
+    league_image = Image.open(io.BytesIO(await league.read()))
 
     total_points = pytesseract.image_to_string(
-        rewards_image.crop(COORDS["total"])
+        league_image.crop(COORDS["total"])
     ).replace(" ", "")
-    rank = pytesseract.image_to_string(rewards_image.crop(COORDS["rank"])).replace(
+    rank = pytesseract.image_to_string(league_image.crop(COORDS["rank"])).replace(
         "\n", " "
     )
 
@@ -175,18 +162,23 @@ async def extract_rewards(rewards):
 
 @bot.tree.command(description="Submit screenshots to register results")
 @app_commands.describe(
-    war="Screenshot of Guild War Log", rewards="Screenshot of Championsip Rewards"
+    war="Screenshot of Guild War Log", league="Screenshot of Championsip League"
 )
 async def submit(
-    i: discord.Interaction, war: discord.Attachment, rewards: discord.Attachment
+    i: discord.Interaction, war: discord.Attachment, league: discord.Attachment
 ):
     await i.response.defer()
     war_data = await extract_war_log(war)
-    rewards_data = await extract_rewards(rewards)
+    league_data = await extract_league(league)
 
-    await add_submission(*war_data, *rewards_data, i.user.display_name)
+    await add_submission(*war_data, *league_data, i.user.display_name)
 
     await i.followup.send("Screenshots recorded! ✅")
 
 
-bot.run(TOKEN)
+async def main():
+    await connect_db()
+    await bot.start(TOKEN)
+
+
+asyncio.run(main())

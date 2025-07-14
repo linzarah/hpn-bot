@@ -4,13 +4,16 @@ import sys
 from datetime import datetime
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from database import add_guild, get_guild
+from database import add_guild, connect_db, get_guild, init_db
 
 with open("assets/guilds.csv", encoding="utf-8") as file:
     data = file.read()
 
 
 async def main():
+    await connect_db()
+    await init_db()
+
     for line in data.split("\n"):
         try:
             guild_name, server_number = line.split(";")
@@ -27,7 +30,7 @@ async def main():
             server_number,
             570001399161683988,
             "Linzarah",
-            datetime.now().strftime(format="%d/%m/%Y, %H:%M:%S"),
+            datetime.now(),
         )
 
 
