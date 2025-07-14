@@ -26,11 +26,11 @@ load_dotenv()
 
 TOKEN = os.getenv("TOKEN")
 COORDS = {
-    "mine": (830, 140, 1075, 300),
-    "opponent": (1470, 140, 1740, 300),
-    "date": (1800, 130, 1990, 190),
-    "total": (1090, 177, 1320, 215),
-    "rank": (500, 300, 710, 430),
+    "mine": (800, 140, 1110, 320),
+    "opponent": (1485, 140, 1690, 320),
+    "date": (1810, 140, 2015, 180),
+    "total": (1105, 175, 1350, 217),
+    "rank": (400, 310, 710, 430),
 }
 
 intents = discord.Intents.default()
@@ -46,14 +46,7 @@ async def on_ready():
 
 @bot.command()
 async def sync(ctx):
-    try:
-        print("🔄 Attempting to sync slash commands globally...")
-        synced = await bot.tree.sync()
-        print(f"✅ Synced {len(synced)} commands globally:")
-        for cmd in synced:
-            print(f" - {cmd.name}")
-    except Exception as e:
-        print(f"⚠️ Error syncing commands: {e}")
+    await bot.tree.sync()
     await ctx.send("Commands synced!")
 
 
@@ -115,15 +108,17 @@ async def register_member(i: discord.Interaction, guild: str, member: discord.Me
 
 
 def get_info_from_title(text: str) -> tuple[int, str, int]:
-    for n, line in enumerate(text.split("\n")):
+    n = 0
+    for line in enumerate(text.split("\n")):
         if not line:
             continue
         if n == 0:
-            server_number = int(line.split("Server: ")[1])
+            server_number = int(re.search(r"\d+\.?\d*", line).group())
         if n == 1:
             guild = line
-        if n == 3:
+        if n == 2:
             points = int(re.search(r"\d+\.?\d*", line).group())
+        n += 1
     return server_number, guild, points
 
 
@@ -135,7 +130,10 @@ async def extract_war_log(war):
 
     server_number, guild_name, points_scored = get_info_from_title(mytext)
     opponent_server, opponent_guild, opponent_scored = get_info_from_title(opptext)
-    date = pytesseract.image_to_string(war_image.crop(COORDS["date"]))
+
+    date = pytesseract.image_to_string(war_image.crop(COORDS["date"])).removesuffix(
+        "\n"
+    )
     return (
         server_number,
         guild_name,
@@ -150,11 +148,16 @@ async def extract_war_log(war):
 async def extract_league(league):
     league_image = Image.open(io.BytesIO(await league.read()))
 
-    total_points = pytesseract.image_to_string(
-        league_image.crop(COORDS["total"])
-    ).replace(" ", "")
-    rank = pytesseract.image_to_string(league_image.crop(COORDS["rank"])).replace(
-        "\n", " "
+    total_points = (
+        pytesseract.image_to_string(league_image.crop(COORDS["total"]))
+        .replace(" ", "")
+        .removesuffix("\n")
+    )
+
+    rank = (
+        pytesseract.image_to_string(league_image.crop(COORDS["rank"]))
+        .replace("\n", " ")
+        .removesuffix(" ")
     )
 
     return total_points, rank

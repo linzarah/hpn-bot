@@ -42,8 +42,8 @@ async def init_db():
                     opponent_server INT NOT NULL,
                     opponent_guild VARCHAR(255) NOT NULL,
                     opponent_scored INT NOT NULL,
-                    date DATETIME NOT NULL,
-                    total_points INT NOT NULL,
+                    date VARCHAR(50) NOT NULL,
+                    total_points VARCHAR(50) NOT NULL,
                     rank VARCHAR(50) NOT NULL,
                     submitted_by VARCHAR(255) NOT NULL
                 )
