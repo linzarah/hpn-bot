@@ -43,7 +43,7 @@ async def init_db():
                     opponent_guild VARCHAR(255) NOT NULL,
                     opponent_scored INT NOT NULL,
                     date VARCHAR(50) NOT NULL,
-                    total_points VARCHAR(50) NOT NULL,
+                    total_points INT NOT NULL,
                     rank VARCHAR(50) NOT NULL,
                     submitted_by VARCHAR(255) NOT NULL
                 )
@@ -109,7 +109,7 @@ async def add_member(member, guild_id):
                 VALUES (%s, %s, %s)
                 ON DUPLICATE KEY UPDATE username = VALUES(username), guild_id = VALUES(guild_id)
                 """,
-                (member.id, member.display_name, guild_id),
+                (member.id, member.name, guild_id),
             )
 
 
