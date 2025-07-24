@@ -3,6 +3,7 @@ import io
 import logging
 import os
 import re
+import traceback
 from datetime import datetime
 
 import cv2
@@ -25,10 +26,6 @@ from database import (
 
 logging.basicConfig()
 load_dotenv()
-
-pytesseract.pytesseract.tesseract_cmd = (
-    r"C:\Users\jose-miguel\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"
-)
 
 TOKEN = os.getenv("TOKEN")
 COORDS = {
@@ -216,10 +213,16 @@ async def submit(
     i: discord.Interaction, war: discord.Attachment, league: discord.Attachment
 ):
     await i.response.defer()
-    war_data = extract_war_info(await war.read())
-    league_data = extract_league(await league.read())
 
-    await add_submission(**war_data, **league_data, submitted_by=i.user.name)
+    try:
+        war_data = extract_war_info(await war.read())
+        league_data = extract_league(await league.read())
+        await add_submission(**war_data, **league_data, submitted_by=i.user.name)
+    except Exception as error:
+        war.save("war_error.png")
+        league.save("league_error.png")
+        with open("error.log", "a", encoding="utf-8") as f:
+            traceback.print_exception(type(error), error, error.__traceback__, file=f)
 
     await i.followup.send("Screenshots recorded! ✅")
 
