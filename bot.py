@@ -219,8 +219,9 @@ async def submit(
         league_data = extract_league(await league.read())
         await add_submission(**war_data, **league_data, submitted_by=i.user.name)
     except Exception as error:
-        war.save("war_error.png")
-        league.save("league_error.png")
+        n = len(os.listdir("fails"))
+        await war.save(f"fails/war_error{n}.png")
+        await league.save(f"fails/league_error{n}.png")
         with open("error.log", "a", encoding="utf-8") as f:
             traceback.print_exception(type(error), error, error.__traceback__, file=f)
 
