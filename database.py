@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-pool = None
+pool: aiomysql.Pool = None
 
 
 async def connect_db():
@@ -17,6 +17,11 @@ async def connect_db():
         db=os.getenv("DB_NAME"),
         autocommit=True,
     )
+
+
+async def close_db():
+    pool.close()
+    await pool.wait_closed()
 
 
 async def init_db():
@@ -74,8 +79,7 @@ async def get_guilds_from_name(current):
                 "SELECT id, guild_name, server_number FROM guilds WHERE guild_name LIKE %s LIMIT 25",
                 (f"%{current}%",),
             )
-            results = await cursor.fetchall()
-            return results
+            return await cursor.fetchall()
 
 
 async def get_guild_by_id(guild):
@@ -127,12 +131,21 @@ async def add_submission(
 ):
     async with pool.acquire() as conn:
         async with conn.cursor() as cursor:
-            await cursor.execute(
+            return await cursor.execute(
                 """
-                INSERT INTO submissions
-                (server_number, guild_name, points_scored, opponent_server, opponent_guild,
-                 opponent_scored, date, total_points, rank, submitted_by)
+                INSERT INTO submissions (
+                    server_number, guild_name, points_scored, opponent_server, opponent_guild,
+                    opponent_scored, date, total_points, rank, submitted_by
+                )
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    points_scored = VALUES(points_scored),
+                    opponent_server = VALUES(opponent_server),
+                    opponent_guild = VALUES(opponent_guild),
+                    opponent_scored = VALUES(opponent_scored),
+                    total_points = VALUES(total_points),
+                    rank = VALUES(rank),
+                    submitted_by = VALUES(submitted_by)
                 """,
                 (
                     server_number,
@@ -147,3 +160,27 @@ async def add_submission(
                     submitted_by,
                 ),
             )
+
+
+async def get_leaderboard(date):
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                """
+                SELECT server_number, guild_name, total_points, rank, RANK() OVER (ORDER BY total_points DESC) AS num
+                FROM submissions WHERE date = %s
+                ORDER BY total_points DESC LIMIT 20;
+                """,
+                (date,),
+            )
+            return await cursor.fetchall()
+
+
+async def get_date(current):
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                "SELECT date FROM submissions WHERE date LIKE %s LIMIT 25",
+                (f"%{current}%",),
+            )
+            return await cursor.fetchall()

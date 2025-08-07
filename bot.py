@@ -1,41 +1,36 @@
 import asyncio
-import io
 import logging
 import os
-import re
-import traceback
 from datetime import datetime
 
-import cv2
 import discord
-import numpy as np
-import pytesseract
 from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
-from PIL import Image
 
 from database import (
     add_guild,
     add_member,
     add_submission,
     connect_db,
+    get_date,
     get_guild_by_id,
     get_guilds_from_name,
+    get_leaderboard,
+)
+from screenshots import extract_league, extract_war
+
+logging.basicConfig(
+    handlers=(
+        logging.StreamHandler(),
+        logging.FileHandler("error.log"),
+    ),
+    level=logging.WARN,
 )
 
-logging.basicConfig()
 load_dotenv()
 
 TOKEN = os.getenv("TOKEN")
-COORDS = {
-    "mine": (0.318, 0.13, 0.462, 0.3),
-    "opponent": (0.617, 0.13, 0.765, 0.3),
-    "date": (0.76, 0.13, 0.85, 0.167),
-    "total": (0.44, 0.15, 0.65, 0.21),
-    "rank": (0.142, 0.287, 0.3, 0.39),
-    "rank2": (0.35, 0.288, 0.45, 0.39),
-}
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -112,99 +107,6 @@ async def register_member(i: discord.Interaction, guild: str, member: discord.Me
     )
 
 
-def extract_war_info(img_bytes):
-    img_array = np.frombuffer(img_bytes, np.uint8)
-    image = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    mask = cv2.inRange(hsv, (10, 50, 50), (30, 255, 255))
-
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    x, y, w, h = (
-        cv2.boundingRect(max(contours, key=cv2.contourArea))
-        if contours
-        else (0, 0, image.shape[1], image.shape[0])
-    )
-
-    panel = Image.fromarray(
-        cv2.cvtColor(image[y : y + h, x : x + w], cv2.COLOR_BGR2RGB)
-    )
-    W, H = panel.size
-
-    coords = {
-        "server_number": (0.37, 0.1, 0.457, 0.14),
-        "guild_name": (0.23, 0.15, 0.457, 0.2),
-        "points_scored": (0.335, 0.21, 0.405, 0.26),
-        "opponent_server": (0.67, 0.1, 0.766, 0.14),
-        "opponent_guild": (0.67, 0.15, 0.85, 0.2),
-        "opponent_scored": (0.715, 0.21, 0.79, 0.26),
-        "date": (0.85, 0.09, 0.955, 0.135),
-    }
-
-    result = {}
-
-    for key, (x1, y1, x2, y2) in coords.items():
-        label: str = pytesseract.image_to_string(
-            panel.crop((x1 * W, y1 * H, x2 * W, y2 * H)), config="--psm 6"
-        ).strip()
-        if key in ("points_scored", "opponent_scored"):
-            data = int(label)
-        elif key in ("server_number", "opponent_server"):
-            data = int(label.removeprefix("Server: "))
-        else:
-            data = label
-        result[key] = data
-
-    return result
-
-
-def get_coords(name, size):
-    W, H = size
-    rat = W / H
-    x1, y1, x2, y2 = COORDS[name]
-    left = x1 * W
-    top = y1 * H
-    right = x2 * W
-    bottom = y2 * H
-    if rat < 1.5:
-        left -= W / 25
-        right -= W / 30
-        top += H / 22
-        bottom += H / 22
-    elif rat < 2:
-        left -= W / 12
-        right -= W / 30
-        bottom *= 1.1
-    return left, top, right, bottom
-
-
-def get_label(image: Image.Image, name) -> str:
-    crop = image.crop(get_coords(name, image.size))
-    crop.show()
-    return pytesseract.image_to_string(crop, config="--psm 6").strip("\n]*-\|[()-_ ")
-
-
-def extract_league(img_bytes):
-    image = Image.open(io.BytesIO(img_bytes))
-    image.save("test.png")
-
-    result = {}
-    rank = get_label(image, "rank")
-    chars = 5 if "Marquis" in rank and "4" not in rank else 4
-    if not rank or not any(
-        [w in rank for w in ("Duke", "Duca", "Marquis", "Earl", "Viscount")]
-    ):
-        chars = 5
-        rank = get_label(image, "rank2")
-    result["rank"] = rank.replace("\n", " ")
-    total = get_label(image, "total")
-    result["total_points"] = int(
-        re.search(r"\d+ ?\d*", total).group().replace(" ", "")[:chars]
-    )
-
-    return result
-
-
 @bot.tree.command(description="Submit screenshots to register results")
 @app_commands.describe(
     war="Screenshot of Guild War Log", league="Screenshot of Championsip League"
@@ -215,17 +117,46 @@ async def submit(
     await i.response.defer()
 
     try:
-        war_data = extract_war_info(await war.read())
+        war_data = extract_war(await war.read())
         league_data = extract_league(await league.read())
         await add_submission(**war_data, **league_data, submitted_by=i.user.name)
-    except Exception as error:
+    except Exception:
         n = len(os.listdir("fails"))
         await war.save(f"fails/war_error{n}.png")
         await league.save(f"fails/league_error{n}.png")
-        with open("error.log", "a", encoding="utf-8") as f:
-            traceback.print_exception(type(error), error, error.__traceback__, file=f)
+        return await i.followup.send("Screenshot failed to read... ❌")
 
     await i.followup.send("Screenshots recorded! ✅")
+
+
+async def date_autocomplete(
+    _: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    results = await get_date(current)
+
+    unique_dates = list(dict.fromkeys(res[0] for res in results))
+
+    return [app_commands.Choice(name=date, value=date) for date in unique_dates]
+
+
+@bot.tree.command(description="View guilds leaderboard")
+@app_commands.autocomplete(date=date_autocomplete)
+async def leaderboard(i: discord.Interaction, date: str):
+    await i.response.defer()
+
+    desc = "\n".join(
+        [
+            f"`{num}` {guild_name} (S{server_number}): **{total_points}** _{rank}_"
+            for server_number, guild_name, total_points, rank, num in await get_leaderboard(
+                date
+            )
+        ]
+    )
+    embed = discord.Embed(
+        title="Leaderboard 🏆", description=desc, color=discord.Color.gold()
+    )
+    embed.set_footer(text=date)
+    await i.followup.send(embed=embed)
 
 
 async def main():
