@@ -46,7 +46,7 @@ class ReportView(discord.ui.View):
         self.message: discord.Message
         super().__init__(timeout=180)
 
-    @discord.ui.button(label="Report", style=discord.ButtonStyle.red, emoji="❕")
+    @discord.ui.button(label="Report", style=discord.ButtonStyle.red, emoji="🗣️")
     async def report_button(self, i: discord.Interaction, button: discord.Button):
         await i.response.send_message("The screenshots will be reviewed ✅")
         button.disabled = True
@@ -61,6 +61,9 @@ class ReportView(discord.ui.View):
             )
             return False
         return True
+
+    async def on_timeout(self):
+        await self.message.edit(view=None)
 
     async def save_fails(self):
         n = len(os.listdir("fails"))
@@ -155,7 +158,9 @@ async def submit(
         n = len(os.listdir("fails"))
         await war.save(f"fails/war_error{n}.png")
         await league.save(f"fails/league_error{n}.png")
-        return await i.followup.send("Failed to read screenshots... ❌")
+        return await i.followup.send(
+            "Failed to read screenshots... Make sure you added them in the right order ❌"
+        )
 
     embed = discord.Embed(
         color=discord.Color.green(),
