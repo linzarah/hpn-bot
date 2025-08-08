@@ -40,6 +40,12 @@ LEAGUE_COORDS = {
         "rank": (0.14, 0.33, 0.3, 0.41),
         "rank2": (0.31, 0.33, 0.43, 0.41),
     },
+    "zflip": {
+        "total": (0.54, 0.435, 0.6, 0.46),
+        "total2": (0.58, 0.435, 0.66, 0.46),
+        "rank": (0.14, 0.51, 0.3, 0.6),
+        "rank2": (0.31, 0.51, 0.43, 0.6),
+    },
 }
 LEAGUES = {
     "Baron": {"Baron"},
@@ -105,7 +111,9 @@ def _adjust_screenshot(img_bytes):
 def _get_coords(name, size):
     W, H = size
     rat = W / H
-    if rat < 1.5:
+    if rat < 1.3:
+        category = "zflip"
+    elif rat < 1.5:
         category = "skinny"
     elif rat < 2:
         category = "slim"
@@ -138,9 +146,9 @@ def extract_league(img_bytes, debug=False):
     if debug:
         print(image.width / image.height)
 
-    rank = get_label(image, "rank", debug)
-    total = None
     league = None
+    total = None
+    rank = get_label(image, "rank", debug)
     for e_league, translations in LEAGUES.items():
         if any(w in rank for w in translations):
             league = e_league
@@ -154,14 +162,19 @@ def extract_league(img_bytes, debug=False):
 
     result = {}
     result["league"] = league
-    result["division"] = int(re.search(r": \d+", rank).group().removeprefix(": "))
+    division = int(re.search(r": \d+", rank).group().removeprefix(": "))
+    result["division"] = division
     points = re.search(r"\d+ ?\d*", total).group().replace(" ", "")
-    result["total_points"] = int(points[: _get_chars(league, points)])
+    result["total_points"] = int(points[: _get_chars(league, division, points)])
 
     return result
 
 
-def _get_chars(league: str, points: str):
+def _get_chars(league: str, division: int, points: str):
     if league == "Duke" or (league == "Marquis" and points.startswith("1")):
         return 5
+    if league == "Baron" and (
+        (division == 3 and not points.startswith("1")) or division == 4
+    ):
+        return 3
     return 4
