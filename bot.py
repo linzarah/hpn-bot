@@ -38,6 +38,36 @@ intents.message_content = True
 bot = commands.Bot(command_prefix=commands.when_mentioned, intents=intents)
 
 
+class ReportView(discord.ui.View):
+    def __init__(self, author, war, league):
+        self.author: discord.User = author
+        self.war: discord.Attachment = war
+        self.league: discord.Attachment = league
+        self.message: discord.Message
+        super().__init__(timeout=180)
+
+    @discord.ui.button(label="Report", style=discord.ButtonStyle.red, emoji="❕")
+    async def report_button(self, i: discord.Interaction, button: discord.Button):
+        await i.response.send_message("The screenshots will be reviewed ✅")
+        button.disabled = True
+        await self.message.edit(view=self)
+        await self.save_fails()
+
+    async def interaction_check(self, i: discord.Interaction):
+        if i.user.id != self.author.id:
+            await i.response.send_message(
+                "Only the person who used the command can report an error",
+                ephemeral=True,
+            )
+            return False
+        return True
+
+    async def save_fails(self):
+        n = len(os.listdir("fails"))
+        await self.war.save(f"fails/war_error{n}.png")
+        await self.league.save(f"fails/league_error{n}.png")
+
+
 @bot.event
 async def on_ready():
     print(f"✅ {bot.user}: Bot started")
@@ -120,13 +150,24 @@ async def submit(
         war_data = extract_war(await war.read())
         league_data = extract_league(await league.read())
         await add_submission(**war_data, **league_data, submitted_by=i.user.name)
-    except Exception:
+    except Exception as e:
+        logging.error(e)
         n = len(os.listdir("fails"))
         await war.save(f"fails/war_error{n}.png")
         await league.save(f"fails/league_error{n}.png")
-        return await i.followup.send("Screenshot failed to read... ❌")
+        return await i.followup.send("Failed to read screenshots... ❌")
 
-    await i.followup.send("Screenshots recorded! ✅")
+    embed = discord.Embed(
+        color=discord.Color.green(),
+        title="Screenshots recorded ✅",
+        description="Use the report button only if there is an error in the information detected. The screenshot will be manually reviewed and the algorythm will be corrected.",
+    )
+    for data in (war_data, league_data):
+        for key, value in data.items():
+            embed.add_field(name=key, value=value)
+
+    view = ReportView(i.user, war, league)
+    view.message = await i.followup.send(embed=embed, view=view)
 
 
 async def date_autocomplete(
