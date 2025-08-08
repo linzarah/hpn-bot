@@ -16,28 +16,34 @@ WAR_COORDS = {
     "date": (0.84, 0.09, 0.955, 0.135),
 }
 LEAGUE_COORDS = {
+    "large": {
+        "total": (0.464, 0.15, 0.6, 0.21),
+        "total2": (0.545, 0.16, 0.66, 0.22),
+        "rank": (0.145, 0.287, 0.32, 0.38),
+        "rank2": (0.31, 0.288, 0.43, 0.39),
+    },
     "medium": {
-        "total": (0.45, 0.15, 0.6, 0.21),
-        "total2": (0.5, 0.16, 0.66, 0.22),
+        "total": (0.464, 0.15, 0.6, 0.21),
+        "total2": (0.54, 0.16, 0.66, 0.22),
         "rank": (0.145, 0.287, 0.32, 0.38),
         "rank2": (0.31, 0.288, 0.43, 0.39),
     },
     "slim": {
-        "total": (0.45, 0.15, 0.6, 0.21),
-        "total2": (0.5, 0.17, 0.67, 0.22),
+        "total": (0.464, 0.15, 0.6, 0.21),
+        "total2": (0.55, 0.16, 0.67, 0.22),
         "rank": (0.1, 0.287, 0.25, 0.39),
         "rank2": (0.25, 0.288, 0.42, 0.39),
     },
     "skinny": {
-        "total": (0.45, 0.2, 0.6, 0.28),
-        "total2": (0.5, 0.21, 0.66, 0.26),
+        "total": (0.464, 0.2, 0.6, 0.28),
+        "total2": (0.55, 0.21, 0.66, 0.26),
         "rank": (0.14, 0.33, 0.3, 0.41),
         "rank2": (0.31, 0.33, 0.43, 0.41),
     },
 }
 LEAGUES = {
     "Baron": {"Baron"},
-    "Viscount": {"Viscount"},
+    "Viscount": {"Viscount", "Vicomte", "Visconte"},
     "Earl": {"Earl", "Comte"},
     "Marquis": {"Marquis"},
 }
@@ -56,7 +62,7 @@ def extract_war(img_bytes, debug=False):
         crop = panel.crop((x1 * W, y1 * H, x2 * W, y2 * H))
         if debug:
             crop.show()
-        label: str = pytesseract.image_to_string(crop, config="--psm 6").strip()
+        label: str = pytesseract.image_to_string(crop, config="--psm 7").strip()
         if key in (
             "points_scored",
             "opponent_scored",
@@ -98,11 +104,15 @@ def _adjust_screenshot(img_bytes):
 
 def _get_coords(name, size):
     W, H = size
-    category = "medium"
-    if W / H < 1.5:
+    rat = W / H
+    if rat < 1.5:
         category = "skinny"
-    elif W / H < 2:
+    elif rat < 2:
         category = "slim"
+    elif rat < 2.2:
+        category = "medium"
+    else:
+        category = "large"
     x1, y1, x2, y2 = LEAGUE_COORDS[category][name]
     left = x1 * W
     top = y1 * H
@@ -111,17 +121,22 @@ def _get_coords(name, size):
     return left, top, right, bottom
 
 
-def get_label(image: Image.Image, name, debug) -> str:
+def get_label(image: Image.Image, name: str, debug: bool) -> str:
     crop = image.crop(_get_coords(name, image.size))
     if debug:
         crop.show()
-    return pytesseract.image_to_string(crop, config="--psm 6")
+    config = (
+        "--psm 7 -c tessedit_char_whitelist=0123456789/"
+        if name.startswith("total")
+        else "--psm 6"
+    )
+    return pytesseract.image_to_string(crop, config=config)
 
 
 def extract_league(img_bytes, debug=False):
     image = Image.open(io.BytesIO(img_bytes))
     if debug:
-        print(image.size, image.width / image.height)
+        print(image.width / image.height)
 
     rank = get_label(image, "rank", debug)
     total = None
@@ -131,7 +146,7 @@ def extract_league(img_bytes, debug=False):
             league = e_league
     if league is None:
         rank = get_label(image, "rank2", debug)
-        if "Duke" in rank or "Duca" in rank:
+        if "Duke" in rank or "Duc" in rank:
             league = "Duke"
             total = get_label(image, "total2", debug)
     if total is None:
