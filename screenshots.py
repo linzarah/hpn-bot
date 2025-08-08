@@ -19,7 +19,7 @@ LEAGUE_COORDS = {
     "medium": {
         "total": (0.45, 0.15, 0.6, 0.21),
         "total2": (0.5, 0.16, 0.66, 0.22),
-        "rank": (0.15, 0.287, 0.32, 0.39),
+        "rank": (0.145, 0.287, 0.32, 0.38),
         "rank2": (0.31, 0.288, 0.43, 0.39),
     },
     "slim": {
@@ -35,9 +35,46 @@ LEAGUE_COORDS = {
         "rank2": (0.31, 0.33, 0.43, 0.41),
     },
 }
+LEAGUES = {
+    "Baron": {"Baron"},
+    "Viscount": {"Viscount"},
+    "Earl": {"Earl", "Comte"},
+    "Marquis": {"Marquis"},
+}
+GUILD_MATCHES = {
+    "LOADS OF AAGIIAAOK": "LORDS OF RAGNAROK",
+    "4 THE PRIMARCHS &": "THE PRIMARCHS",
+    "CAIC5IK! Hello!": "こんにちは! Hello!",
+}
 
 
-def extract_war(img_bytes):
+def extract_war(img_bytes, debug=False):
+    panel, W, H = _adjust_screenshot(img_bytes)
+
+    result = {}
+    for key, (x1, y1, x2, y2) in WAR_COORDS.items():
+        crop = panel.crop((x1 * W, y1 * H, x2 * W, y2 * H))
+        if debug:
+            crop.show()
+        label: str = pytesseract.image_to_string(crop, config="--psm 6").strip()
+        if key in (
+            "points_scored",
+            "opponent_scored",
+            "server_number",
+            "opponent_server",
+        ):
+            number = re.search(r"\d+", label)
+            if not number:
+                raise ValueError(f"{key} not found in screenshot")
+            data = int(number.group())
+        else:
+            data = GUILD_MATCHES[label] if label in GUILD_MATCHES else label
+        result[key] = data
+
+    return result
+
+
+def _adjust_screenshot(img_bytes):
     img_array = np.frombuffer(img_bytes, np.uint8)
     image = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
 
@@ -56,39 +93,15 @@ def extract_war(img_bytes):
     )
     W, H = panel.size
     W = H * 1.8260105448154658
-
-    result = {}
-
-    for key, (x1, y1, x2, y2) in WAR_COORDS.items():
-        crop = panel.crop((x1 * W, y1 * H, x2 * W, y2 * H))
-        label: str = pytesseract.image_to_string(crop, config="--psm 6").strip()
-        if key in (
-            "points_scored",
-            "opponent_scored",
-            "server_number",
-            "opponent_server",
-        ):
-            s_number = re.search(r"\d+", label)
-            if not s_number:
-                raise ValueError(f"{key} not found in screenshot")
-            data = int(s_number.group())
-        else:
-            data = label
-            if data == "LOADS OF AAGIIAAOK":
-                data = "LORDS OF RAGNAROK"
-        result[key] = data
-
-    return result
+    return panel, W, H
 
 
-def get_coords(name, size):
+def _get_coords(name, size):
     W, H = size
-    print(W / H)
     category = "medium"
     if W / H < 1.5:
         category = "skinny"
     elif W / H < 2:
-        print(1)
         category = "slim"
     x1, y1, x2, y2 = LEAGUE_COORDS[category][name]
     left = x1 * W
@@ -98,67 +111,42 @@ def get_coords(name, size):
     return left, top, right, bottom
 
 
-def get_label(image: Image.Image, name) -> str:
-    crop = image.crop(get_coords(name, image.size))
-    # crop.show()
-    return pytesseract.image_to_string(crop, config="--psm 6").strip(
-        "\n]*-\|[()-_ —.>»"
-    )
+def get_label(image: Image.Image, name, debug) -> str:
+    crop = image.crop(_get_coords(name, image.size))
+    if debug:
+        crop.show()
+    return pytesseract.image_to_string(crop, config="--psm 6")
 
 
-def extract_league(img_bytes):
+def extract_league(img_bytes, debug=False):
     image = Image.open(io.BytesIO(img_bytes))
-    result = {}
+    if debug:
+        print(image.size, image.width / image.height)
 
-    rank = get_label(image, "rank")
-    chars = 5 if "Marquis" in rank and "4" not in rank else 4
-    if not rank or not any([w in rank for w in ("Marquis", "Earl", "Viscount")]):
-        chars = 5
-        rank = get_label(image, "rank2")
-        total = get_label(image, "total2")
-    else:
-        total = get_label(image, "total")
-    result["rank"] = rank.replace("\n", " ")
-    result["total_points"] = int(
-        re.search(r"\d+ ?\d*", total).group().replace(" ", "")[:chars]
-    )
+    rank = get_label(image, "rank", debug)
+    total = None
+    league = None
+    for e_league, translations in LEAGUES.items():
+        if any(w in rank for w in translations):
+            league = e_league
+    if league is None:
+        rank = get_label(image, "rank2", debug)
+        if "Duke" in rank or "Duca" in rank:
+            league = "Duke"
+            total = get_label(image, "total2", debug)
+    if total is None:
+        total = get_label(image, "total", debug)
+
+    result = {}
+    result["league"] = league
+    result["division"] = int(re.search(r": \d+", rank).group().removeprefix(": "))
+    points = re.search(r"\d+ ?\d*", total).group().replace(" ", "")
+    result["total_points"] = int(points[: _get_chars(league, points)])
 
     return result
 
 
-"""# TESTING
-
-import asyncio
-import os
-from collections import defaultdict
-
-from database import add_submission, close_db, connect_db
-
-DIR = "C:/Users/jose-miguel/documents/dev/python/hpn-bot/fails"
-
-pytesseract.pytesseract.tesseract_cmd = (
-    r"C:\\Users\jose-miguel\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"
-)
-
-di = defaultdict(dict)
-for image in os.listdir(DIR):
-    n = int(image.split(".")[0][-1:])
-    with open(os.path.join(DIR, image), "rb") as f:
-        bytes_ = f.read()
-    if image.startswith("war"):
-        di[n]["war"] = extract_war(bytes_)
-    else:
-        di[n]["league"] = extract_league(bytes_)
-    
-print(di)
-
-
-async def main(war, league):
-    await connect_db()
-    await add_submission(**war, **league, submitted_by="Fused")
-    await close_db()
-
-
-for n, data in di.items():
-   asyncio.run(main(data["war"], data["league"]))
-"""
+def _get_chars(league: str, points: str):
+    if league == "Duke" or (league == "Marquis" and points.startswith("1")):
+        return 5
+    return 4

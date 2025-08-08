@@ -49,7 +49,8 @@ async def init_db():
                     opponent_scored INT NOT NULL,
                     date VARCHAR(50) NOT NULL,
                     total_points INT NOT NULL,
-                    rank VARCHAR(50) NOT NULL,
+                    league VARCHAR(50) NOT NULL,
+                    division INT NOT NULL,
                     submitted_by VARCHAR(255) NOT NULL
                 )
             """)
@@ -126,7 +127,8 @@ async def add_submission(
     opponent_scored,
     date,
     total_points,
-    rank,
+    league,
+    division,
     submitted_by,
 ):
     async with pool.acquire() as conn:
@@ -135,16 +137,17 @@ async def add_submission(
                 """
                 INSERT INTO submissions (
                     server_number, guild_name, points_scored, opponent_server, opponent_guild,
-                    opponent_scored, date, total_points, rank, submitted_by
+                    opponent_scored, date, total_points, league, division, submitted_by
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE
                     points_scored = VALUES(points_scored),
                     opponent_server = VALUES(opponent_server),
                     opponent_guild = VALUES(opponent_guild),
                     opponent_scored = VALUES(opponent_scored),
                     total_points = VALUES(total_points),
-                    rank = VALUES(rank),
+                    league = VALUES(league),
+                    division = VALUES(division),
                     submitted_by = VALUES(submitted_by)
                 """,
                 (
@@ -156,7 +159,8 @@ async def add_submission(
                     opponent_scored,
                     date,
                     total_points,
-                    rank,
+                    league,
+                    division,
                     submitted_by,
                 ),
             )
@@ -167,7 +171,7 @@ async def get_leaderboard(date):
         async with conn.cursor() as cursor:
             await cursor.execute(
                 """
-                SELECT server_number, guild_name, total_points, rank, RANK() OVER (ORDER BY total_points DESC) AS num
+                SELECT server_number, guild_name, total_points, league, division, RANK() OVER (ORDER BY total_points DESC) AS num
                 FROM submissions WHERE date = %s
                 ORDER BY total_points DESC LIMIT 20;
                 """,

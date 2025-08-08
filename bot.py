@@ -25,7 +25,7 @@ logging.basicConfig(
         logging.StreamHandler(),
         logging.FileHandler("error.log"),
     ),
-    level=logging.WARN,
+    level=logging.ERROR,
 )
 
 load_dotenv()
@@ -146,8 +146,8 @@ async def leaderboard(i: discord.Interaction, date: str):
 
     desc = "\n".join(
         [
-            f"`{num}` {guild_name} (S{server_number}): **{total_points}** _{rank}_"
-            for server_number, guild_name, total_points, rank, num in await get_leaderboard(
+            f"`#{num}` {guild_name} (S{server_number}): **{total_points}** _{league} league Division: {division}_"
+            for server_number, guild_name, total_points, league, division, num in await get_leaderboard(
                 date
             )
         ]
