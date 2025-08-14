@@ -51,7 +51,7 @@ LEAGUES = {
     "Baron": {"Baron"},
     "Viscount": {"Viscount", "Vicomte", "Visconte"},
     "Earl": {"Earl", "Comte"},
-    "Marquis": {"Marquis"},
+    "Marquis": {"Marquis", "Marchese"},
 }
 GUILD_MATCHES = {
     "LOADS OF AAGIIAAOK": "LORDS OF RAGNAROK",
@@ -162,7 +162,7 @@ def extract_league(img_bytes, debug=False):
 
     result = {}
     result["league"] = league
-    division = int(re.search(r": \d+", rank).group().removeprefix(": "))
+    division = int(re.findall(r"\d+", rank)[-1])
     result["division"] = division
     points = re.search(r"\d+ ?\d*", total).group().replace(" ", "")
     result["total_points"] = int(points[: _get_chars(league, division, points)])
