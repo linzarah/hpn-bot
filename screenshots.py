@@ -76,9 +76,7 @@ def extract_war(img_bytes, debug=False):
             "opponent_server",
         ):
             number = re.search(r"\d+", label)
-            if not number:
-                raise ValueError(f"{key} not found in screenshot")
-            data = int(number.group())
+            data = int(number.group()) if number and number.group().isdigit() else None
         else:
             data = GUILD_MATCHES[label] if label in GUILD_MATCHES else label
         result[key] = data
@@ -162,10 +160,13 @@ def extract_league(img_bytes, debug=False):
 
     result = {}
     result["league"] = league
-    division = int(re.findall(r"\d+", rank)[-1])
+    matches = re.findall(r"\d+", rank)
+    division = int(matches[-1]) if matches else None
     result["division"] = division
-    points = re.search(r"\d+ ?\d*", total).group().replace(" ", "")
-    result["total_points"] = int(points[: _get_chars(league, division, points)])
+    points = re.search(r"\d+ ?\d*", total)
+    if points is not None:
+        points = points.group().replace(" ", "")
+        result["total_points"] = int(points[: _get_chars(league, division, points)])
 
     return result
 

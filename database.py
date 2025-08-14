@@ -133,7 +133,7 @@ async def add_submission(
 ):
     async with pool.acquire() as conn:
         async with conn.cursor() as cursor:
-            return await cursor.execute(
+            await cursor.execute(
                 """
                 INSERT INTO submissions (
                     server_number, guild_name, points_scored, opponent_server, opponent_guild,
@@ -164,6 +164,42 @@ async def add_submission(
                     submitted_by,
                 ),
             )
+
+            if cursor.lastrowid:
+                return cursor.lastrowid
+            else:
+                await cursor.execute(
+                    """
+                    SELECT id FROM submissions
+                    WHERE server_number = %s AND guild_name = %s AND date = %s
+                    """,
+                    (server_number, guild_name, date),
+                )
+                row = await cursor.fetchone()
+                return row[0] if row else None
+
+
+async def edit_label(record_id: int, label: str, new_value):
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cursor:
+            if label not in {
+                "server_number",
+                "guild_name",
+                "points_scored",
+                "opponent_server",
+                "opponent_guild",
+                "opponent_scored",
+                "date",
+                "total_points",
+                "league",
+                "division",
+                "submitted_by",
+            }:
+                raise ValueError(f"Invalid label: {label}")
+
+            query = f"UPDATE submissions SET {label} = %s WHERE id = %s"
+            await cursor.execute(query, (new_value, record_id))
+            await conn.commit()
 
 
 async def get_leaderboard(date):
