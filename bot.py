@@ -52,12 +52,13 @@ bot = commands.Bot(command_prefix=commands.when_mentioned, intents=intents)
 
 class AmendModal(Modal):
     def __init__(self, id_, label, value, view):
-        super().__init__(title="Enter the corrected data")
         self.id_ = id_
         self.label = label
         self.value = value
         self.view: "AmendView" = view
         self.amend = TextInput(label=label, default=value)
+        super().__init__(title="Enter the corrected data")
+        self.add_item(self.amend)
 
     async def on_submit(self, i: Interaction):
         if self.amend.value == str(self.value):
