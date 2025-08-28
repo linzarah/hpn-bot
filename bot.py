@@ -1,10 +1,12 @@
 import asyncio
+import contextlib
 import logging
 import os
 from datetime import datetime
 
 from discord import (
     Attachment,
+    ButtonStyle,
     Color,
     Embed,
     Intents,
@@ -15,8 +17,9 @@ from discord import (
     User,
     app_commands,
 )
+from discord.errors import NotFound
 from discord.ext import commands
-from discord.ui import Modal, Select, TextInput, View
+from discord.ui import Button, Modal, Select, TextInput, View, button
 from dotenv import load_dotenv
 
 from database import (
@@ -25,7 +28,6 @@ from database import (
     add_submission,
     connect_db,
     edit_label,
-    get_date,
     get_guild_by_id,
     get_guilds_from_name,
     get_leaderboard,
@@ -48,6 +50,154 @@ intents = Intents.default()
 intents.message_content = True
 
 bot = commands.Bot(command_prefix=commands.when_mentioned, intents=intents)
+
+
+class Paginator:
+    def __init__(self, **kwargs) -> None:
+        self.rows: list[str] = kwargs.get("leaderboard")
+        self.i: Interaction = kwargs.get("interaction")
+        self.display_filters: str = kwargs.get("display_filters")
+        self.ITEMS_PER_PAGE = 20
+        self.view = (
+            PaginatorView(self.i, self, timeout=30)
+            if len(self.rows) > self.ITEMS_PER_PAGE
+            else None
+        )
+
+        self.page = kwargs.get("page", 1)
+        calculation = len(self.rows) / self.ITEMS_PER_PAGE
+        self.total_pages = (
+            int(calculation) if calculation.is_integer() else int(calculation) + 1
+        )
+        if self.total_pages == 0:
+            self.total_pages = 1
+
+    def _get_rows(self) -> list[dict]:
+        return self.rows[
+            (self.page - 1) * self.ITEMS_PER_PAGE : self.page * self.ITEMS_PER_PAGE
+        ]
+
+    def _build_embed(self):
+        embed = Embed(
+            description="" if self.rows else "No results found", color=Color.gold()
+        )
+
+        for (
+            server_number,
+            guild_name,
+            total_points,
+            league,
+            division,
+            num,
+        ) in self._get_rows():
+            embed.add_field(
+                name=f"#{num} {guild_name} (S{server_number})",
+                value=f"`{total_points}` {league} League {division}",
+                inline=False,
+            )
+
+        embed.set_footer(text=f"Page {self.page}/{self.total_pages}")
+        embed.set_author(
+            name=f"🏆 Leaderboard - {self.display_filters}",
+        )
+        return embed
+
+    @property
+    def embed(self) -> Embed:
+        return self._build_embed()
+
+    async def send_message(self, i: Interaction):
+        if not i.command:
+            self.view.update_buttons()
+            await i.followup.edit_message(
+                message_id=i.message.id, embed=self.embed, view=self.view
+            )
+        elif self.view:
+            await i.followup.send(embed=self.embed, view=self.view)
+        else:
+            await i.followup.send(embed=self.embed)
+
+
+class PaginatorView(View):
+    def __init__(self, i, paginator, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.i: Interaction = i
+        self.paginator: Paginator = paginator
+
+    async def on_timeout(self):
+        if self.paginator.i:
+            with contextlib.suppress(NotFound):
+                m = await self.paginator.i.original_response()
+                await m.edit(view=None)
+
+    async def interaction_check(self, i: Interaction) -> bool:
+        await i.response.defer()
+        if i.user != self.i.user:
+            await i.followup.send(
+                "This is not your leaderboard.",
+            )
+            return False
+        return True
+
+    async def callback(self, interaction: Interaction, button: Button):
+        if button.custom_id == "stop":
+            await interaction.message.delete()
+            return self.stop()
+        if button.custom_id == "last":
+            self.paginator.page -= 1
+            return await self.paginator.send_message(interaction)
+        if button.custom_id == "next":
+            self.paginator.page += 1
+            return await self.paginator.send_message(interaction)
+        if button.custom_id == "fastlast":
+            self.paginator.page = 1
+            return await self.paginator.send_message(interaction)
+        if button.custom_id == "fastnext":
+            self.paginator.page = self.paginator.total_pages
+            return await self.paginator.send_message(interaction)
+
+    def update_buttons(self):
+        last_disable = self.paginator.page <= 1
+        next_disable = self.paginator.page >= self.paginator.total_pages
+        self.children[0].disabled = last_disable
+        self.children[1].disabled = last_disable
+        self.children[-2].disabled = next_disable
+        self.children[-1].disabled = next_disable
+
+    @button(
+        emoji="⏪",
+        custom_id="fastlast",
+        style=ButtonStyle.secondary,
+        disabled=True,
+    )
+    async def fastlast_callback(self, interaction: Interaction, button: Button):
+        return await self.callback(interaction, button)
+
+    @button(emoji="◀", custom_id="last", style=ButtonStyle.secondary, disabled=True)
+    async def last_callback(self, interaction: Interaction, button: Button):
+        return await self.callback(interaction, button)
+
+    @button(emoji="❌", custom_id="stop", style=ButtonStyle.secondary)
+    async def stop_callback(self, interaction: Interaction, button: Button):
+        return await self.callback(interaction, button)
+
+    @button(
+        emoji="▶️",
+        custom_id="next",
+        style=ButtonStyle.secondary,
+        disabled=False,
+    )
+    async def next_callback(self, interaction: Interaction, button: Button):
+        return await self.callback(interaction, button)
+
+    @button(
+        emoji="⏩",
+        custom_id="fastnext",
+        style=ButtonStyle.secondary,
+        disabled=False,
+    )
+    async def fastnext_callback(self, interaction: Interaction, button: Button):
+        return await self.callback(interaction, button)
 
 
 class AmendModal(Modal):
@@ -220,32 +370,25 @@ async def submit(i: Interaction, war: Attachment, league: Attachment):
     view.message = await i.followup.send(embed=embed, view=view)
 
 
-async def date_autocomplete(
-    _: Interaction, current: str
-) -> list[app_commands.Choice[str]]:
-    results = await get_date(current)
-
-    unique_dates = list(dict.fromkeys(res[0] for res in results))
-
-    return [app_commands.Choice(name=date, value=date) for date in unique_dates]
+year = datetime.now().year
 
 
 @bot.tree.command(description="View guilds leaderboard")
-@app_commands.autocomplete(date=date_autocomplete)
-async def leaderboard(i: Interaction, date: str):
+async def leaderboard(
+    i: Interaction,
+    day: app_commands.Range[int, 1, 31],
+    month: app_commands.Range[int, 1, 12],
+    year: app_commands.Range[int, year - 1, year],
+):
     await i.response.defer()
 
-    desc = "\n".join(
-        [
-            f"`#{num}` {guild_name} (S{server_number}): **{total_points}** _{league} league Division: {division}_"
-            for server_number, guild_name, total_points, league, division, num in await get_leaderboard(
-                date
-            )
-        ]
+    date = f"{day}/0{month}/{year}"
+    paginator = Paginator(
+        leaderboard=await get_leaderboard(date),
+        interaction=i,
+        display_filters=date,
     )
-    embed = Embed(title="Leaderboard 🏆", description=desc, color=Color.gold())
-    embed.set_footer(text=date)
-    await i.followup.send(embed=embed)
+    await paginator.send_message(i)
 
 
 async def main():

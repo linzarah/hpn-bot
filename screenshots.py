@@ -158,11 +158,9 @@ def extract_league(img_bytes, debug=False):
     if total is None:
         total = get_label(image, "total", debug)
 
-    result = {}
-    result["league"] = league
     matches = re.findall(r"\d+", rank)
     division = int(matches[-1]) if matches else None
-    result["division"] = division
+    result = {"league": league, "division": division, "total_points": None}
     points = re.search(r"\d+ ?\d*", total)
     if points is not None:
         points = points.group().replace(" ", "")

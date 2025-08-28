@@ -209,14 +209,14 @@ async def get_leaderboard(date):
                 """
                 SELECT server_number, guild_name, total_points, league, division, RANK() OVER (ORDER BY total_points DESC) AS num
                 FROM submissions WHERE date = %s
-                ORDER BY total_points DESC LIMIT 20;
+                ORDER BY total_points DESC;
                 """,
                 (date,),
             )
             return await cursor.fetchall()
 
 
-async def get_date(current):
+async def get_latest_date(current):
     async with pool.acquire() as conn:
         async with conn.cursor() as cursor:
             await cursor.execute(
