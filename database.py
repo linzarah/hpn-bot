@@ -35,7 +35,8 @@ async def init_db():
                     user_id BIGINT NOT NULL,
                     username VARCHAR(255) NOT NULL,
                     registered_at DATETIME NOT NULL,
-                    active TINYINT(1) DEFAULT 1
+                    active TINYINT(1) DEFAULT 1,
+                    UNIQUE KEY unique_guild_per_server (guild_name, server_number)
                 )
             """)
             await cur.execute("""
@@ -100,6 +101,10 @@ async def add_guild(guild_name, server_number, user_id, username, registered_at)
                 """
                 INSERT INTO guilds (guild_name, server_number, user_id, username, registered_at)
                 VALUES (%s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    user_id = VALUES(user_id),
+                    username = VALUES(username),
+                    registered_at = VALUES(registered_at),
                 """,
                 (guild_name, server_number, user_id, username, registered_at),
             )
