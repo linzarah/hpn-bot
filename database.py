@@ -243,4 +243,5 @@ async def get_latest_date():
     async with pool.acquire() as conn:
         async with conn.cursor() as cursor:
             await cursor.execute("SELECT MAX(date) FROM submissions;")
-            return await cursor.fetchone()
+            res = await cursor.fetchone()
+            return res[0]

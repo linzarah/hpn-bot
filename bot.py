@@ -407,7 +407,9 @@ async def date_autocomplete(
 async def leaderboard(i: Interaction, date: str = None):
     await i.response.defer()
     if date is None:
-        date = str(await get_latest_date())
+        date = await get_latest_date()
+        date = str(date)
+        print(date)
 
     paginator = Paginator(
         leaderboard=await get_leaderboard(date),
