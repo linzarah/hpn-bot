@@ -1,5 +1,7 @@
 import io
+import logging
 import re
+from datetime import date
 
 import cv2
 import numpy as np
@@ -77,6 +79,13 @@ def extract_war(img_bytes, debug=False):
         ):
             number = re.search(r"\d+", label)
             data = int(number.group()) if number and number.group().isdigit() else None
+        elif key == "date":
+            day, month, year = label.removesuffix(" J").split("/")
+            try:
+                data = date(int(year), int(month), int(day))
+            except Exception as e:
+                logging.error(e)
+                data = None
         else:
             data = GUILD_MATCHES[label] if label in GUILD_MATCHES else label
         result[key] = data

@@ -2,7 +2,7 @@ import asyncio
 import contextlib
 import logging
 import os
-from datetime import datetime
+from datetime import date, datetime
 
 from discord import (
     Attachment,
@@ -28,8 +28,10 @@ from database import (
     add_submission,
     connect_db,
     edit_label,
+    get_date,
     get_guild_by_id,
     get_guilds_from_name,
+    get_latest_date,
     get_leaderboard,
 )
 from screenshots import extract_league, extract_war
@@ -206,20 +208,43 @@ class AmendModal(Modal):
         self.label = label
         self.value = value
         self.view: "AmendView" = view
-        self.amend = TextInput(label=label, default=value)
+        if label == "date":
+            label = "date [YYY-mm-dd]"
+        self.amend = TextInput(label=label, default=str(value))
         super().__init__(title="Enter the corrected data")
         self.add_item(self.amend)
 
     async def on_submit(self, i: Interaction):
         if self.amend.value == str(self.value):
             return await i.response.send_message("The data wasn't modified...")
-        value = (
-            int(self.amend.value) if self.amend.value.isdigit() else self.amend.value
-        )
+
+        if self.label in (
+            "server_number",
+            "points_scored",
+            "opponent_server",
+            "opponent_scored",
+            "total_points",
+            "division",
+        ):
+            if not self.amend.value.isdigit():
+                return await i.response.send_message(f"{self.label} must be a number")
+            value = int(self.amend.value)
+        elif self.label == "date":
+            year, month, day = self.amend.value.split("-")
+            try:
+                value = date(int(year), int(month), int(day))
+            except Exception:
+                return await i.response.send_message(
+                    "Wrong date format, must be YYYY-mm-dd"
+                )
+        else:
+            value = self.amend.value
+
         await self.view.save_fails()
         try:
             await edit_label(self.id_, self.label, value)
-        except Exception:
+        except Exception as e:
+            logging.error(e)
             return await i.response.send_message("Failed amending data...")
         await i.response.send_message(f"{self.label} was updated to {value}")
 
@@ -246,7 +271,7 @@ class AmendView(View):
         self.war: Attachment = war
         self.league: Attachment = league
         self.message: Message
-        super().__init__(timeout=180)
+        super().__init__(timeout=60 * 15)
         self.add_item(AmendSelect(id_, labels))
 
     async def interaction_check(self, i: Interaction):
@@ -370,19 +395,20 @@ async def submit(i: Interaction, war: Attachment, league: Attachment):
     view.message = await i.followup.send(embed=embed, view=view)
 
 
-year = datetime.now().year
+async def date_autocomplete(
+    _: Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    results = await get_date(current)
+    return [app_commands.Choice(name=str(date), value=str(date)) for date in results]
 
 
 @bot.tree.command(description="View guilds leaderboard")
-async def leaderboard(
-    i: Interaction,
-    day: app_commands.Range[int, 1, 31],
-    month: app_commands.Range[int, 1, 12],
-    year: app_commands.Range[int, year - 1, year],
-):
+@app_commands.autocomplete(date=date_autocomplete)
+async def leaderboard(i: Interaction, date: str = None):
     await i.response.defer()
+    if date is None:
+        date = str(await get_latest_date())
 
-    date = f"{day}/0{month}/{year}"
     paginator = Paginator(
         leaderboard=await get_leaderboard(date),
         interaction=i,

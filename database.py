@@ -2,6 +2,7 @@ import os
 
 import aiomysql
 from dotenv import load_dotenv
+from pymysql.err import IntegrityError
 
 load_dotenv()
 
@@ -203,8 +204,15 @@ async def edit_label(record_id: int, label: str, new_value):
                 raise ValueError(f"Invalid label: {label}")
 
             query = f"UPDATE submissions SET {label} = %s WHERE id = %s"
-            await cursor.execute(query, (new_value, record_id))
-            await conn.commit()
+            try:
+                await cursor.execute(query, (new_value, record_id))
+            except IntegrityError as e:
+                if e.args[0] == 1062:
+                    await cursor.execute(
+                        "DELETE FROM submissions WHERE id = %s", (record_id,)
+                    )
+                else:
+                    raise e
 
 
 async def get_leaderboard(date):
@@ -221,11 +229,18 @@ async def get_leaderboard(date):
             return await cursor.fetchall()
 
 
-async def get_latest_date(current):
+async def get_date(current):
     async with pool.acquire() as conn:
         async with conn.cursor() as cursor:
             await cursor.execute(
-                "SELECT date FROM submissions WHERE date LIKE %s LIMIT 25",
+                "SELECT DISTINCT date FROM submissions WHERE date LIKE %s ORDER BY date DESC LIMIT 25; ",
                 (f"%{current}%",),
             )
             return await cursor.fetchall()
+
+
+async def get_latest_date():
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cursor:
+            await cursor.execute("SELECT MAX(date) FROM submissions;")
+            return await cursor.fetchone()
