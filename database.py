@@ -85,6 +85,16 @@ async def get_guilds_from_name(current):
             return await cursor.fetchall()
 
 
+async def get_opponent_guilds_from_name(current):
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                "SELECT DISTINCT opponent_guild, opponent_server FROM submissions WHERE opponent_guild LIKE %s LIMIT 25",
+                (f"%{current}%",),
+            )
+            return await cursor.fetchall()
+
+
 async def get_guild_by_id(guild):
     async with pool.acquire() as conn:
         async with conn.cursor() as cursor:

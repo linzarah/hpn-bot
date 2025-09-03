@@ -34,6 +34,7 @@ from database import (
     get_latest_date,
     get_leaderboard,
     get_opponent_data,
+    get_opponent_guilds_from_name,
 )
 from screenshots import extract_league, extract_war
 
@@ -54,7 +55,7 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix=commands.when_mentioned, intents=intents)
 
-result_map = {"Win": "🟥", "Loss": "🟩", "Draw": "⬜"}
+result_map = {"Win": "🟩", "Loss": "🟥", "Draw": "⬜"}
 
 
 class LeaderboardPaginator:
@@ -156,7 +157,7 @@ class OpponentPaginator:
         embed = Embed(
             title=self.guild_name,
             description=self.summary if self.data else "No results found",
-            color=Color.gold(),
+            color=Color.blue(),
         )
 
         for (
@@ -167,9 +168,13 @@ class OpponentPaginator:
             submission_date,
             result,
         ) in self._get_rows():
+            if result == "Win":
+                result = "Loss"
+            elif result == "Loss":
+                result = "Win"
             embed.add_field(
-                name=f"{submission_date} - {guild_name} (S{server_number})",
-                value=f"{result_map[result]} `{opponent_scored}` vs `{points_scored}`",
+                name=f"{self.guild_name} - {guild_name} (S{server_number})",
+                value=f"{result_map[result]} {submission_date} `{opponent_scored}` - `{points_scored}`",
                 inline=False,
             )
 
@@ -502,23 +507,8 @@ def get_display_date(since, until) -> str:
     return f"{since} -> {until}"
 
 
-def get_opponent_summary(data):
-    points = 0
-    results = {"Win": 0, "Loss": 0, "Draw": 0}
-    last_5 = []
-    seasons = []
-    for n, row in enumerate(data):
-        _, _, _, opponent_scored, date, result = row
-        points += opponent_scored
-        results[result] += 1
-        season = str(date)[:-3]
-        if season not in seasons:
-            seasons.append(season)
-        if n <= 5:
-            last_5.append(result_map[result])
-    avg = points // len(data)
-    f_seasons = [f"`{s}`" for s in seasons]
-    formatted_results = []
+def get_formatted_results(results: dict) -> str:
+    result_types = []
     for res, amount in results.items():
         emoji = result_map[res]
         if amount != 1:
@@ -526,13 +516,56 @@ def get_opponent_summary(data):
                 res = "Losses"
             else:
                 res += "s"
-        formatted_results.append(f"`{amount}` {res} {emoji}")
-    return f"{' - '.join(formatted_results)}\n\n**Last 5**: {' '.join(last_5)}\n**Average**: `{avg}`\n**Seasons covered**: {', '.join(f_seasons)}"
+        result_types.append(f"`{amount}` {res} {emoji}")
+    return " - ".join(result_types)
+
+
+def get_opponent_summary(data):
+    points = 0
+    seasons = []
+
+    results = {"Win": 0, "Loss": 0, "Draw": 0}
+    last_5 = []
+    for n, row in enumerate(data):
+        _, _, _, opponent_scored, date, result = row
+        points += opponent_scored
+        season = f"`{str(date)[:-3]}`"
+        if season not in seasons:
+            seasons.append(season)
+
+        if result == "Win":
+            result = "Loss"
+        elif result == "Loss":
+            result = "Win"
+        results[result] += 1
+        if n <= 5:
+            last_5.append(result_map[result])
+
+    average = f"**Average**: `{points // len(data)}`"
+    f_seasons = f"**Seasons covered**: {', '.join(seasons)}"
+    f_last_5 = f"**Last 5**: {' '.join(last_5)}"
+
+    return "\n".join([get_formatted_results(results), f_last_5, average, f_seasons])
+
+
+async def opponent_guild_autocomplete(
+    _: Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    choices = []
+    guild_data = await get_opponent_guilds_from_name(current)
+    for guild_name, server_number in guild_data:
+        guild_server = f"{guild_name} (S{server_number})"
+        choices.append(
+            app_commands.Choice(
+                name=guild_server, value=f"{guild_name}///{server_number}"
+            )
+        )
+    return choices
 
 
 @bot.tree.command(description="Check opponent stats")
 @app_commands.autocomplete(
-    guild=guild_name_autocomplete, since=date_autocomplete, until=date_autocomplete
+    guild=opponent_guild_autocomplete, since=date_autocomplete, until=date_autocomplete
 )
 @app_commands.describe(
     guild="Select the guild",
@@ -543,14 +576,11 @@ async def check_opponent(
     i: Interaction, guild: str, since: str = None, until: str = None
 ):
     await i.response.defer()
-    row = await get_guild_by_id(guild)
-    if not row:
-        return await i.followup.send(
-            "❌ Guild not found. Please register the opponent's guild first.",
-            ephemeral=True,
-        )
+    try:
+        guild_name, server_number = guild.split("///")
+    except ValueError:
+        return await i.followup.send(f"Couldn't find results for guild {guild}")
 
-    _, guild_name, server_number = row
     display_date = get_display_date(since, until)
     data = await get_opponent_data(guild_name, server_number, since, until)
     summary = get_opponent_summary(data) if data else ""
