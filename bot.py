@@ -33,6 +33,7 @@ from database import (
     get_guilds_from_name,
     get_latest_date,
     get_leaderboard,
+    get_opponent_data,
 )
 from screenshots import extract_league, extract_war
 
@@ -53,8 +54,10 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix=commands.when_mentioned, intents=intents)
 
+result_map = {"Win": "🟥", "Loss": "🟩", "Draw": "⬜"}
 
-class Paginator:
+
+class LeaderboardPaginator:
     def __init__(self, **kwargs) -> None:
         self.rows: list[str] = kwargs.get("leaderboard")
         self.i: Interaction = kwargs.get("interaction")
@@ -120,11 +123,81 @@ class Paginator:
             await i.followup.send(embed=self.embed)
 
 
+class OpponentPaginator:
+    def __init__(
+        self, data, guild_name, display_date, summary, interaction, **kwargs
+    ) -> None:
+        self.data: list[tuple] = data
+        self.guild_name: str = guild_name
+        self.display_date: str = display_date
+        self.summary: str = summary
+        self.i: Interaction = interaction
+        self.ITEMS_PER_PAGE = 20
+        self.view = (
+            PaginatorView(self.i, self, timeout=30)
+            if len(self.data) > self.ITEMS_PER_PAGE
+            else None
+        )
+
+        self.page = kwargs.get("page", 1)
+        calculation = len(self.data) / self.ITEMS_PER_PAGE
+        self.total_pages = (
+            int(calculation) if calculation.is_integer() else int(calculation) + 1
+        )
+        if self.total_pages == 0:
+            self.total_pages = 1
+
+    def _get_rows(self) -> list[dict]:
+        return self.data[
+            (self.page - 1) * self.ITEMS_PER_PAGE : self.page * self.ITEMS_PER_PAGE
+        ]
+
+    def _build_embed(self):
+        embed = Embed(
+            title=self.guild_name,
+            description=self.summary if self.data else "No results found",
+            color=Color.gold(),
+        )
+
+        for (
+            server_number,
+            guild_name,
+            points_scored,
+            opponent_scored,
+            submission_date,
+            result,
+        ) in self._get_rows():
+            embed.add_field(
+                name=f"{submission_date} - {guild_name} (S{server_number})",
+                value=f"{result_map[result]} `{opponent_scored}` vs `{points_scored}`",
+                inline=False,
+            )
+
+        embed.set_footer(text=f"Page {self.page}/{self.total_pages}")
+        embed.set_author(name=f"Opponent Data - {self.display_date}")
+        return embed
+
+    @property
+    def embed(self) -> Embed:
+        return self._build_embed()
+
+    async def send_message(self, i: Interaction):
+        if not i.command:
+            self.view.update_buttons()
+            await i.followup.edit_message(
+                message_id=i.message.id, embed=self.embed, view=self.view
+            )
+        elif self.view:
+            await i.followup.send(embed=self.embed, view=self.view)
+        else:
+            await i.followup.send(embed=self.embed)
+
+
 class PaginatorView(View):
     def __init__(self, i, paginator, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.i: Interaction = i
-        self.paginator: Paginator = paginator
+        self.paginator: LeaderboardPaginator | OpponentPaginator = paginator
 
     async def on_timeout(self):
         if self.paginator.i:
@@ -271,7 +344,7 @@ class AmendView(View):
         self.war: Attachment = war
         self.league: Attachment = league
         self.message: Message
-        super().__init__(timeout=60 * 15)
+        super().__init__(timeout=60 * 10)
         self.add_item(AmendSelect(id_, labels))
 
     async def interaction_check(self, i: Interaction):
@@ -298,7 +371,7 @@ async def on_ready():
 
 
 @bot.command()
-@commands.is_owner()
+# @commands.is_owner()
 async def sync(ctx):
     await bot.tree.sync()
     await ctx.send("Commands synced!")
@@ -399,22 +472,95 @@ async def date_autocomplete(
     _: Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
     results = await get_date(current)
-    return [app_commands.Choice(name=str(date), value=str(date)) for date in results]
+    return [app_commands.Choice(name=str(row[0]), value=str(row[0])) for row in results]
 
 
 @bot.tree.command(description="View guilds leaderboard")
 @app_commands.autocomplete(date=date_autocomplete)
+@app_commands.describe(date="Date in YYYY-mm-dd format")
 async def leaderboard(i: Interaction, date: str = None):
     await i.response.defer()
     if date is None:
         date = await get_latest_date()
         date = str(date)
-        print(date)
 
-    paginator = Paginator(
+    paginator = LeaderboardPaginator(
         leaderboard=await get_leaderboard(date),
         interaction=i,
         display_filters=date,
+    )
+    await paginator.send_message(i)
+
+
+def get_display_date(since, until) -> str:
+    if since is None and until is None:
+        return "All time"
+    if since is None:
+        return f"Until {until}"
+    if until is None:
+        return f"Since {since}"
+    return f"{since} -> {until}"
+
+
+def get_opponent_summary(data):
+    points = 0
+    results = {"Win": 0, "Loss": 0, "Draw": 0}
+    last_5 = []
+    seasons = []
+    for n, row in enumerate(data):
+        _, _, _, opponent_scored, date, result = row
+        points += opponent_scored
+        results[result] += 1
+        season = str(date)[:-3]
+        if season not in seasons:
+            seasons.append(season)
+        if n <= 5:
+            last_5.append(result_map[result])
+    avg = points // len(data)
+    f_seasons = [f"`{s}`" for s in seasons]
+    formatted_results = []
+    for res, amount in results.items():
+        emoji = result_map[res]
+        if amount != 1:
+            if res == "Loss":
+                res = "Losses"
+            else:
+                res += "s"
+        formatted_results.append(f"`{amount}` {res} {emoji}")
+    return f"{' - '.join(formatted_results)}\n\n**Last 5**: {' '.join(last_5)}\n**Average**: `{avg}`\n**Seasons covered**: {', '.join(f_seasons)}"
+
+
+@bot.tree.command(description="Check opponent stats")
+@app_commands.autocomplete(
+    guild=guild_name_autocomplete, since=date_autocomplete, until=date_autocomplete
+)
+@app_commands.describe(
+    guild="Select the guild",
+    since="Date in YYYY-mm-dd format",
+    until="Date in YYYY-mm-dd format",
+)
+async def check_opponent(
+    i: Interaction, guild: str, since: str = None, until: str = None
+):
+    await i.response.defer()
+    row = await get_guild_by_id(guild)
+    if not row:
+        return await i.followup.send(
+            "❌ Guild not found. Please register the opponent's guild first.",
+            ephemeral=True,
+        )
+
+    _, guild_name, server_number = row
+    display_date = get_display_date(since, until)
+    data = await get_opponent_data(guild_name, server_number, since, until)
+    summary = get_opponent_summary(data) if data else ""
+
+    paginator = OpponentPaginator(
+        data=data,
+        guild_name=f"{guild_name} (S{server_number})",
+        display_date=display_date,
+        summary=summary,
+        interaction=i,
     )
     await paginator.send_message(i)
 

@@ -245,3 +245,26 @@ async def get_latest_date():
             await cursor.execute("SELECT MAX(date) FROM submissions;")
             res = await cursor.fetchone()
             return res[0]
+
+
+async def get_opponent_data(guild_name, server_number, since=None, until=None):
+    query = """
+        SELECT server_number, guild_name, points_scored, opponent_scored, date, result
+        FROM submissions
+        WHERE opponent_guild = %s AND opponent_server = %s
+    """
+    params = [guild_name, server_number]
+
+    if since is not None:
+        query += " AND date >= %s"
+        params.append(since)
+    if until is not None:
+        query += " AND date <= %s"
+        params.append(until)
+
+    query += " ORDER BY date DESC"
+
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cursor:
+            await cursor.execute(query, params)
+            return await cursor.fetchall()
