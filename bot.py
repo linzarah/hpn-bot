@@ -293,8 +293,9 @@ class AmendModal(Modal):
         self.add_item(self.amend)
 
     async def on_submit(self, i: Interaction):
+        await i.response.defer()
         if self.amend.value == str(self.value):
-            return await i.response.send_message("The data wasn't modified...")
+            return await i.followup.send("The data wasn't modified...")
 
         if self.label in (
             "server_number",
@@ -305,16 +306,14 @@ class AmendModal(Modal):
             "division",
         ):
             if not self.amend.value.isdigit():
-                return await i.response.send_message(f"{self.label} must be a number")
+                return await i.followup.send(f"{self.label} must be a number")
             value = int(self.amend.value)
         elif self.label == "date":
             year, month, day = self.amend.value.split("-")
             try:
                 value = date(int(year), int(month), int(day))
             except Exception:
-                return await i.response.send_message(
-                    "Wrong date format, must be YYYY-mm-dd"
-                )
+                return await i.followup.send("Wrong date format, must be YYYY-mm-dd")
         else:
             value = self.amend.value
 
@@ -323,8 +322,8 @@ class AmendModal(Modal):
             await edit_label(self.id_, self.label, value)
         except Exception as e:
             logging.error(e)
-            return await i.response.send_message("Failed amending data...")
-        await i.response.send_message(f"{self.label} was updated to {value}")
+            return await i.followup.send("Failed amending data...")
+        await i.followup.send(f"{self.label} was updated to {value}")
 
 
 class AmendSelect(Select):
@@ -376,22 +375,23 @@ async def on_ready():
 
 
 @bot.command()
-# @commands.is_owner()
+@commands.is_owner()
 async def sync(ctx):
     await bot.tree.sync()
     await ctx.send("Commands synced!")
 
 
 @bot.tree.command(description="Register your guild and server")
-async def register_guild(i: Interaction, guild_name: str, server_number: str):
+async def register_guild(i: Interaction, guild_name: str, server_number: int):
     if not i.user.guild_permissions.manage_guild:
         await i.response.send_message(
             "❌ You must have 'Manage Server' permission to register a guild.",
             ephemeral=True,
         )
         return
+    await i.response.defer()
 
-    await add_guild(
+    success = await add_guild(
         guild_name,
         server_number,
         i.user.id,
@@ -399,9 +399,14 @@ async def register_guild(i: Interaction, guild_name: str, server_number: str):
         datetime.now(),
     )
 
-    await i.response.send_message(
-        f"✅ Guild **{guild_name}** (Server {server_number}) registered successfully!"
-    )
+    if success:
+        await i.followup.send(
+            f"✅ Guild **{guild_name}** (Server {server_number}) registered successfully!"
+        )
+    else:
+        await i.followup.send(
+            f"Duplicate data for guild {guild_name} and server {server_number}"
+        )
 
 
 async def guild_name_autocomplete(

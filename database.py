@@ -105,20 +105,21 @@ async def get_guild_by_id(guild):
             return await cursor.fetchone()
 
 
-async def add_guild(guild_name, server_number, user_id, username, registered_at):
+async def add_guild(guild_name, server_number, user_id, username, registered_at) -> bool:
     async with pool.acquire() as conn:
         async with conn.cursor() as cursor:
-            await cursor.execute(
-                """
-                INSERT INTO guilds (guild_name, server_number, user_id, username, registered_at)
-                VALUES (%s, %s, %s, %s, %s)
-                ON DUPLICATE KEY UPDATE
-                    user_id = VALUES(user_id),
-                    username = VALUES(username),
-                    registered_at = VALUES(registered_at),
-                """,
-                (guild_name, server_number, user_id, username, registered_at),
-            )
+            try:
+                await cursor.execute(
+                    """INSERT INTO guilds (guild_name, server_number, user_id, username, registered_at)
+                    VALUES (%s, %s, %s, %s, %s)""",
+                    (guild_name, server_number, user_id, username, registered_at),
+                )
+            except IntegrityError as e:
+                if e.args[0] == 1062:
+                    return False
+                else:
+                    raise e
+            return True
 
 
 async def add_member(member, guild_id):
@@ -195,7 +196,7 @@ async def add_submission(
                 return row[0] if row else None
 
 
-async def edit_label(record_id: int, label: str, new_value):
+async def edit_label(record_id: int, label: str, new_value) -> bool:
     async with pool.acquire() as conn:
         async with conn.cursor() as cursor:
             if label not in {
@@ -221,8 +222,10 @@ async def edit_label(record_id: int, label: str, new_value):
                     await cursor.execute(
                         "DELETE FROM submissions WHERE id = %s", (record_id,)
                     )
+                    return False
                 else:
                     raise e
+            return True
 
 
 async def get_leaderboard(date):
