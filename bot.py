@@ -629,7 +629,7 @@ async def submit(i: Interaction, war: Attachment, league: Attachment):
             server_number=server_number,
             **war_data,
             **league_data,
-            submitted_by=i.user.name,
+            submitted_by=i.user.id,
         )
     except Exception as e:
         logging.error(e)

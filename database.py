@@ -53,7 +53,7 @@ async def init_db():
                     total_points INT NOT NULL,
                     league VARCHAR(50) NOT NULL,
                     division INT NOT NULL,
-                    submitted_by VARCHAR(255) NOT NULL
+                    submitted_by BIGINT NOT NULL
                 )
             """)
             await cur.execute("""
