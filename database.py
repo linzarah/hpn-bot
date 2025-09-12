@@ -330,3 +330,39 @@ async def get_guild_from_member(user_id):
                 (user_id,),
             )
             return await cursor.fetchone()
+
+
+async def rename_guild(guild_id, new_name):
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                "UPDATE guilds SET guild_name = %s WHERE id = %s",
+                (
+                    new_name,
+                    guild_id,
+                ),
+            )
+            return await cursor.rowcount > 0
+
+
+async def reset_guild_server(guild_id, new_server):
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                "UPDATE guilds SET server_number = %s WHERE id = %s",
+                (
+                    new_server,
+                    guild_id,
+                ),
+            )
+            return await cursor.rowcount > 0
+
+
+async def delete_guild(guild_id):
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                "DELETE FROM guilds WHERE id = %s",
+                (guild_id,),
+            )
+            return await cursor.rowcount > 0

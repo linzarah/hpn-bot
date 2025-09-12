@@ -41,6 +41,8 @@ from database import (
     get_missing_submissions,
     get_opponent_guilds_from_name,
     get_records_data,
+    rename_guild,
+    reset_guild_server,
 )
 from screenshots import extract_league, extract_war
 
@@ -62,6 +64,24 @@ intents.message_content = True
 bot = commands.Bot(command_prefix=commands.when_mentioned, intents=intents)
 
 result_map = {"Win": "🟩", "Loss": "🟥", "Draw": "⬜"}
+
+
+class ConfirmView(View):
+    def __init__(self):
+        super().__init__()
+        self.value = None
+
+    @button(label="✅ Confirm", style=ButtonStyle.green)
+    async def confirm(self, interaction: Interaction, _: Button):
+        self.value = True
+        self.stop()
+        await interaction.response.edit_message(content="Confirmed ✅", view=None)
+
+    @button(label="❌ Cancel", style=ButtonStyle.red)
+    async def cancel(self, interaction: Interaction, _: Button):
+        self.value = False
+        self.stop()
+        await interaction.response.edit_message(content="Cancelled ❌", view=None)
 
 
 class LeaderboardPaginator:
@@ -802,6 +822,53 @@ async def missing_submissions(
     data = await get_missing_submissions(since)
     paginator = MissingSubmissionPaginator(data, period, i)
     await paginator.send_message(i)
+
+
+@bot.tree.command(description="Rename a guild")
+@app_commands.describe(guild="Select the guild")
+@app_commands.autocomplete(guild=guild_name_autocomplete)
+async def guild_rename(i: Interaction, guild: str, new_name: str):
+    await i.response.defer()
+    success = await rename_guild(guild, new_name)
+
+    if not success:
+        return await i.followup.send("❌ Guild not found", ephemeral=True)
+
+    await i.followup.send(f"✅ Guild successfully renamed to {new_name}.")
+
+
+@bot.tree.command(description="Update a guild's server")
+@app_commands.describe(guild="Select the guild")
+@app_commands.autocomplete(guild=guild_name_autocomplete)
+async def guild_set_server(i: Interaction, guild: str, new_server: int):
+    await i.response.defer()
+    success = await reset_guild_server(guild, new_server)
+
+    if not success:
+        return await i.followup.send("❌ Guild not found", ephemeral=True)
+
+    await i.followup.send(f"✅ Guild server successfully updated to {new_server}.")
+
+
+@bot.tree.command(description="Delete a guild from the bot")
+@app_commands.describe(guild="Select the guild")
+@app_commands.autocomplete(guild=guild_name_autocomplete)
+async def delete_guild(i: Interaction, guild: str):
+    await i.response.defer()
+
+    view = ConfirmView()
+    await i.followup.send("Are you sure you want to delete this guild?", view=view)
+    await view.wait()
+
+    if view.value is None:
+        await i.followup.send("⏳ Timed out, no response.")
+    elif view.value:
+        success = await delete_guild(guild)
+        if not success:
+            return await i.followup.send("❌ Guild not found", ephemeral=True)
+        await i.followup.send("✅ Guild deleted successfully.")
+    else:
+        await i.followup.send("Operation cancelled ❌")
 
 
 async def main():
