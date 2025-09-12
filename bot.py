@@ -30,6 +30,7 @@ from database import (
     add_member,
     add_submission,
     connect_db,
+    delete_guild_from_db,
     edit_label,
     get_date,
     get_guild_by_id,
@@ -69,7 +70,7 @@ class DiscordBot(commands.Bot):
         self.add_view(AmendView())
 
     async def on_ready(self):
-        print(f"Logged in as {self.user} (ID: {self.user.id})")
+        print(f"Bot started as {self.user} (ID: {self.user.id})")
 
 
 bot = DiscordBot()
@@ -900,7 +901,7 @@ async def delete_guild(i: Interaction, guild: str):
     if view.value is None:
         await i.followup.send("⏳ Timed out, no response.")
     elif view.value:
-        success = await delete_guild(guild)
+        success = await delete_guild_from_db(guild)
         if not success:
             return await i.followup.send("❌ Guild not found", ephemeral=True)
         await i.followup.send("✅ Guild deleted successfully.")

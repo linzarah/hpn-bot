@@ -342,7 +342,7 @@ async def rename_guild(guild_id, new_name):
                     guild_id,
                 ),
             )
-            return await cursor.rowcount > 0
+            return cursor.rowcount > 0
 
 
 async def reset_guild_server(guild_id, new_server):
@@ -355,14 +355,14 @@ async def reset_guild_server(guild_id, new_server):
                     guild_id,
                 ),
             )
-            return await cursor.rowcount > 0
+            return cursor.rowcount > 0
 
 
-async def delete_guild(guild_id):
+async def delete_guild_from_db(guild_id):
     async with pool.acquire() as conn:
         async with conn.cursor() as cursor:
             await cursor.execute(
                 "DELETE FROM guilds WHERE id = %s",
                 (guild_id,),
             )
-            return await cursor.rowcount > 0
+            return cursor.rowcount > 0
