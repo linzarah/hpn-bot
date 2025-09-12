@@ -625,8 +625,6 @@ async def submit(i: Interaction, war: Attachment, league: Attachment):
         war_data = extract_war(await war.read())
         league_data = extract_league(await league.read())
         id_ = await add_submission(
-            guild_name=guild_name,
-            server_number=server_number,
             **war_data,
             **league_data,
             submitted_by=i.user.id,
@@ -642,12 +640,11 @@ async def submit(i: Interaction, war: Attachment, league: Attachment):
 
     embed = Embed(
         color=Color.green(),
-        title="Screenshots recorded ✅",
+        title=f"Screenshots recorded ✅ - {guild_name} (S{server_number})",
     )
     embed.set_footer(text=f"Submission ID: {id_}")
     labels = {}
     for data in (
-        {"guild_name": guild_name, "server_number": server_number},
         war_data,
         league_data,
     ):
@@ -768,7 +765,7 @@ async def check_opponent(
         return await i.followup.send(f"Couldn't find results for guild {guild}")
 
     display_date = get_display_date(since, until)
-    data = await get_records_data(guild_name, server_number, since, until, True)
+    data = await get_records_data((guild_name, server_number), since, until, True)
     summary = get_records_summary(data, True) if data else ""
 
     paginator = RecordsPaginator(
@@ -797,7 +794,7 @@ async def my_guild(i: Interaction, since: str = None, until: str = None):
     _, guild_name, server_number = await get_guild_by_id(guild_id)
 
     display_date = get_display_date(since, until)
-    data = await get_records_data(guild_name, server_number, since, until)
+    data = await get_records_data(guild_id, since, until)
     summary = get_records_summary(data) if data else ""
 
     paginator = RecordsPaginator(

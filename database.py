@@ -25,46 +25,6 @@ async def close_db():
     await pool.wait_closed()
 
 
-async def init_db():
-    async with pool.acquire() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute("""
-                CREATE TABLE IF NOT EXISTS guilds (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    guild_name VARCHAR(255) NOT NULL,
-                    server_number INT NOT NULL,
-                    user_id BIGINT NOT NULL,
-                    username VARCHAR(255) NOT NULL,
-                    registered_at DATETIME NOT NULL,
-                    active TINYINT(1) DEFAULT 1,
-                    UNIQUE KEY unique_guild_per_server (guild_name, server_number)
-                )
-            """)
-            await cur.execute("""
-                CREATE TABLE IF NOT EXISTS submissions (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    server_number INT NOT NULL,
-                    guild_name VARCHAR(255) NOT NULL,
-                    points_scored INT NOT NULL,
-                    opponent_server INT NOT NULL,
-                    opponent_guild VARCHAR(255) NOT NULL,
-                    opponent_scored INT NOT NULL,
-                    date VARCHAR(50) NOT NULL,
-                    total_points INT NOT NULL,
-                    league VARCHAR(50) NOT NULL,
-                    division INT NOT NULL,
-                    submitted_by BIGINT NOT NULL
-                )
-            """)
-            await cur.execute("""
-                CREATE TABLE IF NOT EXISTS members (
-                    user_id BIGINT PRIMARY KEY,
-                    username VARCHAR(255) NOT NULL,
-                    guild_id INT NOT NULL
-                )
-            """)
-
-
 async def get_guild(guild_name, server_number):
     async with pool.acquire() as conn:
         async with conn.cursor() as cursor:
@@ -138,8 +98,6 @@ async def add_member(member, guild_id):
 
 
 async def add_submission(
-    server_number,
-    guild_name,
     points_scored,
     opponent_server,
     opponent_guild,
@@ -154,11 +112,10 @@ async def add_submission(
         async with conn.cursor() as cursor:
             await cursor.execute(
                 """
-                INSERT INTO submissions (
-                    server_number, guild_name, points_scored, opponent_server, opponent_guild,
+                INSERT INTO submissions (points_scored, opponent_server, opponent_guild,
                     opponent_scored, date, total_points, league, division, submitted_by
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE
                     points_scored = VALUES(points_scored),
                     opponent_server = VALUES(opponent_server),
@@ -170,8 +127,6 @@ async def add_submission(
                     submitted_by = VALUES(submitted_by)
                 """,
                 (
-                    server_number,
-                    guild_name,
                     points_scored,
                     opponent_server,
                     opponent_guild,
@@ -188,11 +143,9 @@ async def add_submission(
                 return cursor.lastrowid
             else:
                 await cursor.execute(
-                    """
-                    SELECT id FROM submissions
-                    WHERE server_number = %s AND guild_name = %s AND date = %s
-                    """,
-                    (server_number, guild_name, date),
+                    """SELECT id FROM submissions
+                    WHERE submitted_by = %s AND date = %s""",
+                    (submitted_by, date),
                 )
                 row = await cursor.fetchone()
                 return row[0] if row else None
@@ -234,11 +187,10 @@ async def get_leaderboard(date):
     async with pool.acquire() as conn:
         async with conn.cursor() as cursor:
             await cursor.execute(
-                """
-                SELECT server_number, guild_name, total_points, league, division, RANK() OVER (ORDER BY total_points DESC) AS num
-                FROM submissions WHERE date = %s
-                ORDER BY total_points DESC;
-                """,
+                """SELECT server_number, guild_name, total_points, league, division, RANK() OVER (ORDER BY total_points DESC)
+                FROM submissions
+                JOIN guilds ON guilds.id = guild_id
+                WHERE date = %s;""",
                 (date,),
             )
             return await cursor.fetchall()
@@ -262,18 +214,18 @@ async def get_latest_date():
             return res[0]
 
 
-async def get_records_data(
-    guild_name, server_number, since=None, until=None, opponent=False
-):
+async def get_records_data(guild_id, since=None, until=None, opponent=False):
     if opponent:
         query = """SELECT server_number, guild_name, opponent_scored, points_scored, date, result
         FROM submissions
+        JOIN guilds ON guild.id = guild_id
         WHERE opponent_guild = %s AND opponent_server = %s"""
+        params = guild_id
     else:
         query = """SELECT opponent_server, opponent_guild, points_scored, opponent_scored, date, result
         FROM submissions
         WHERE guild_name = %s AND server_number = %s"""
-    params = [guild_name, server_number]
+        params = (guild_id,)
 
     if since is not None:
         query += " AND date >= %s"
@@ -294,13 +246,11 @@ async def get_missing_submissions(since):
     query = """SELECT g.id, g.guild_name, g.server_number, m.user_id
         FROM guilds g
         LEFT JOIN submissions s 
-            ON g.guild_name = s.guild_name
-        AND g.server_number = s.server_number
+            ON g.id = s.guild_id
         AND s.date >= %s
         LEFT JOIN members m
             ON g.id = m.guild_id
-        WHERE s.guild_name IS NULL;
-        """
+        WHERE s.guild_id IS NULL;"""
 
     async with pool.acquire() as conn, conn.cursor() as cursor:
         await cursor.execute(query, (since,))
