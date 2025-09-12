@@ -18,7 +18,6 @@ from discord import (
     Member,
     Message,
     SelectOption,
-    User,
     app_commands,
 )
 from discord.errors import NotFound
@@ -61,9 +60,34 @@ TOKEN = os.getenv("TOKEN")
 intents = Intents.default()
 intents.message_content = True
 
-bot = commands.Bot(command_prefix=commands.when_mentioned, intents=intents)
 
-result_map = {"Win": "🟩", "Loss": "🟥", "Draw": "⬜"}
+class DiscordBot(commands.Bot):
+    def __init__(self):
+        super().__init__(command_prefix=commands.when_mentioned, intents=intents)
+
+    async def setup_hook(self) -> None:
+        self.add_view(AmendView())
+
+    async def on_ready(self):
+        print(f"Logged in as {self.user} (ID: {self.user.id})")
+
+
+bot = DiscordBot()
+
+LABELS = [
+    "server_number",
+    "guild_name",
+    "points_scored",
+    "opponent_server",
+    "opponent_guild",
+    "opponent_scored",
+    "date",
+    "league",
+    "division",
+    "total_points",
+]
+
+RESULT_MAP = {"Win": "🟩", "Loss": "🟥", "Draw": "⬜"}
 
 
 class ConfirmView(View):
@@ -209,7 +233,7 @@ class RecordsPaginator:
                     result = "Win"
             embed.add_field(
                 name=f"{self.guild_name} - {other_name} (S{other_server})",
-                value=f"{result_map[result]} {submission_date} `{me_scored}` - `{other_scored}`",
+                value=f"{RESULT_MAP[result]} {submission_date} `{me_scored}` - `{other_scored}`",
                 inline=False,
             )
 
@@ -426,14 +450,15 @@ class PaginatorView(View):
 
 
 class AmendModal(Modal):
-    def __init__(self, id_, label, value, view):
+    def __init__(self, id_, label, value):
         self.id_ = id_
         self.label = label
         self.value = value
-        self.view: "AmendView" = view
         if label == "date":
             label = "date [YYY-mm-dd]"
-        self.amend = TextInput(label=label, default=str(value))
+        self.amend = TextInput(
+            label=label, default=str(value) if value is not None else None
+        )
         super().__init__(title="Enter the corrected data")
         self.add_item(self.amend)
 
@@ -462,7 +487,6 @@ class AmendModal(Modal):
         else:
             value = self.amend.value
 
-        await self.view.save_fails()
         try:
             await edit_label(self.id_, self.label, value)
         except Exception as e:
@@ -472,51 +496,35 @@ class AmendModal(Modal):
 
 
 class AmendSelect(Select):
-    def __init__(self, id_, labels):
-        self.id_: int = id_
-        self.labels: dict = labels
-        options = [SelectOption(label=key, value=key) for key in labels]
+    def __init__(self):
+        options = [SelectOption(label=key, value=key) for key in LABELS]
         super().__init__(
-            placeholder="Amend data...", min_values=1, max_values=1, options=options
+            placeholder="Amend data...",
+            min_values=1,
+            max_values=1,
+            options=options,
+            custom_id="amend-select",
         )
 
     async def callback(self, i: Interaction):
         label = self.values[0]
-        await i.response.send_modal(
-            AmendModal(self.id_, label, self.labels[label], self.view)
+        value = next(
+            (
+                field.value
+                for field in i.message.embeds[0].fields
+                if field.name == label
+            ),
+            None,
         )
+        id_ = i.message.embeds[0].footer.text.removeprefix("Submission ID: ")
+        await i.response.send_modal(AmendModal(id_, label, value))
 
 
 class AmendView(View):
-    def __init__(self, author, war, league, id_, labels):
-        self.author: User = author
-        self.war: Attachment = war
-        self.league: Attachment = league
+    def __init__(self):
         self.message: Message
-        super().__init__(timeout=60 * 10)
-        self.add_item(AmendSelect(id_, labels))
-
-    async def interaction_check(self, i: Interaction):
-        if i.user.id != self.author.id:
-            await i.response.send_message(
-                "Only the person who used the command can amend the data",
-                ephemeral=True,
-            )
-            return False
-        return True
-
-    async def on_timeout(self):
-        await self.message.edit(view=None)
-
-    async def save_fails(self):
-        n = len(os.listdir("fails"))
-        await self.war.save(f"fails/war_error{n}.png")
-        await self.league.save(f"fails/league_error{n}.png")
-
-
-@bot.event
-async def on_ready():
-    print(f"✅ {bot.user}: Bot started")
+        super().__init__(timeout=None)
+        self.add_item(AmendSelect())
 
 
 @bot.command()
@@ -613,13 +621,14 @@ async def submit(i: Interaction, war: Attachment, league: Attachment):
         color=Color.green(),
         title="Screenshots recorded ✅",
     )
+    embed.set_footer(text=f"Submission ID: {id_}")
     labels = {}
     for data in (war_data, league_data):
         for key, value in data.items():
             labels[key] = value
             embed.add_field(name=key, value=value if value else "???")
 
-    view = AmendView(i.user, war, league, id_, labels)
+    view = AmendView()
     view.message = await i.followup.send(embed=embed, view=view)
 
 
@@ -660,7 +669,7 @@ def get_display_date(since, until) -> str:
 def get_formatted_results(results: dict) -> str:
     result_types = []
     for res, amount in results.items():
-        emoji = result_map[res]
+        emoji = RESULT_MAP[res]
         if amount != 1:
             if res == "Loss":
                 res = "Losses"
@@ -689,7 +698,7 @@ def get_records_summary(data, opponent=False):
                 result = "Win"
         results[result] += 1
         if n <= 5:
-            last_5.append(result_map[result])
+            last_5.append(RESULT_MAP[result])
 
     average = f"**Average**: `{points // len(data)}`"
     f_seasons = f"**Seasons covered**: {', '.join(seasons)}"
