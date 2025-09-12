@@ -450,10 +450,12 @@ class PaginatorView(View):
 
 
 class AmendModal(Modal):
-    def __init__(self, id_, label, value):
+    def __init__(self, id_, label, value, message, field_index):
         self.id_ = id_
         self.label = label
         self.value = value
+        self.message: Message = message
+        self.field_index: int = field_index
         if label == "date":
             label = "date [YYY-mm-dd]"
         self.amend = TextInput(
@@ -493,6 +495,9 @@ class AmendModal(Modal):
             logging.error(e)
             return await i.followup.send("Failed amending data...")
         await i.followup.send(f"{self.label} was updated to {value}")
+        n_embed = self.message.embeds[0]
+        n_embed.set_field_at(self.field_index, name=self.label, value=value)
+        await self.message.edit(embed=n_embed)
 
 
 class AmendSelect(Select):
@@ -508,16 +513,21 @@ class AmendSelect(Select):
 
     async def callback(self, i: Interaction):
         label = self.values[0]
-        value = next(
+        field_data = next(
             (
-                field.value
-                for field in i.message.embeds[0].fields
+                (n, field.value)
+                for n, field in enumerate(i.message.embeds[0].fields)
                 if field.name == label
             ),
             None,
         )
+        value = field_index = None
+        if field_data is not None:
+            field_index, value = field_data
         id_ = i.message.embeds[0].footer.text.removeprefix("Submission ID: ")
-        await i.response.send_modal(AmendModal(id_, label, value))
+        await i.response.send_modal(
+            AmendModal(id_, label, value, i.message, field_index)
+        )
 
 
 class AmendView(View):
