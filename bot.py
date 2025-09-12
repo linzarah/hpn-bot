@@ -847,6 +847,12 @@ async def missing_submissions(
 @app_commands.describe(guild="Select the guild")
 @app_commands.autocomplete(guild=guild_name_autocomplete)
 async def guild_rename(i: Interaction, guild: str, new_name: str):
+    if not i.user.guild_permissions.manage_guild:
+        await i.response.send_message(
+            "❌ You must have 'Manage Server' permission to rename a guild.",
+            ephemeral=True,
+        )
+        return
     await i.response.defer()
     success = await rename_guild(guild, new_name)
 
@@ -860,6 +866,12 @@ async def guild_rename(i: Interaction, guild: str, new_name: str):
 @app_commands.describe(guild="Select the guild")
 @app_commands.autocomplete(guild=guild_name_autocomplete)
 async def guild_set_server(i: Interaction, guild: str, new_server: int):
+    if not i.user.guild_permissions.manage_guild:
+        await i.response.send_message(
+            "❌ You must have 'Manage Server' permission to reset a guild's server.",
+            ephemeral=True,
+        )
+        return
     await i.response.defer()
     success = await reset_guild_server(guild, new_server)
 
@@ -873,6 +885,12 @@ async def guild_set_server(i: Interaction, guild: str, new_server: int):
 @app_commands.describe(guild="Select the guild")
 @app_commands.autocomplete(guild=guild_name_autocomplete)
 async def delete_guild(i: Interaction, guild: str):
+    if not i.user.guild_permissions.manage_guild:
+        await i.response.send_message(
+            "❌ You must have 'Manage Server' permission to delete a guild.",
+            ephemeral=True,
+        )
+        return
     await i.response.defer()
 
     view = ConfirmView()
