@@ -34,12 +34,13 @@ from database import (
     edit_label,
     get_date,
     get_guild_by_id,
+    get_guild_from_member,
     get_guilds_from_name,
     get_latest_date,
     get_leaderboard,
     get_missing_submissions,
-    get_opponent_data,
     get_opponent_guilds_from_name,
+    get_records_data,
 )
 from screenshots import extract_league, extract_war
 
@@ -129,15 +130,23 @@ class LeaderboardPaginator:
             await i.followup.send(embed=self.embed)
 
 
-class OpponentPaginator:
+class RecordsPaginator:
     def __init__(
-        self, data, guild_name, display_date, summary, interaction, **kwargs
+        self,
+        data,
+        guild_name,
+        display_date,
+        summary,
+        interaction,
+        opponent=False,
+        **kwargs,
     ) -> None:
         self.data: list[tuple] = data
         self.guild_name: str = guild_name
         self.display_date: str = display_date
         self.summary: str = summary
         self.i: Interaction = interaction
+        self.opponent: bool = opponent
         self.ITEMS_PER_PAGE = 20
         self.view = (
             PaginatorView(self.i, self, timeout=30)
@@ -166,20 +175,21 @@ class OpponentPaginator:
         )
 
         for (
-            server_number,
-            guild_name,
-            points_scored,
-            opponent_scored,
+            other_server,
+            other_name,
+            me_scored,
+            other_scored,
             submission_date,
             result,
         ) in self._get_rows():
-            if result == "Win":
-                result = "Loss"
-            elif result == "Loss":
-                result = "Win"
+            if self.opponent:
+                if result == "Win":
+                    result = "Loss"
+                elif result == "Loss":
+                    result = "Win"
             embed.add_field(
-                name=f"{self.guild_name} - {guild_name} (S{server_number})",
-                value=f"{result_map[result]} {submission_date} `{opponent_scored}` - `{points_scored}`",
+                name=f"{self.guild_name} - {other_name} (S{other_server})",
+                value=f"{result_map[result]} {submission_date} `{me_scored}` - `{other_scored}`",
                 inline=False,
             )
 
@@ -315,7 +325,7 @@ class PaginatorView(View):
         super().__init__(*args, **kwargs)
         self.i: Interaction = i
         self.paginator: (
-            LeaderboardPaginator | MissingSubmissionPaginator | OpponentPaginator
+            LeaderboardPaginator | MissingSubmissionPaginator | RecordsPaginator
         ) = paginator
         if isinstance(paginator, MissingSubmissionPaginator):
             self.add_item(RemindButton(missing_submissions))
@@ -640,23 +650,23 @@ def get_formatted_results(results: dict) -> str:
     return " - ".join(result_types)
 
 
-def get_opponent_summary(data):
+def get_records_summary(data, opponent=False):
     points = 0
     seasons = []
 
     results = {"Win": 0, "Loss": 0, "Draw": 0}
     last_5 = []
     for n, row in enumerate(data):
-        _, _, _, opponent_scored, date, result = row
-        points += opponent_scored
+        _, _, scored, _, date, result = row
+        points += scored
         season = f"`{str(date)[:-3]}`"
         if season not in seasons:
             seasons.append(season)
-
-        if result == "Win":
-            result = "Loss"
-        elif result == "Loss":
-            result = "Win"
+        if opponent:
+            if result == "Win":
+                result = "Loss"
+            elif result == "Loss":
+                result = "Win"
         results[result] += 1
         if n <= 5:
             last_5.append(result_map[result])
@@ -702,10 +712,39 @@ async def check_opponent(
         return await i.followup.send(f"Couldn't find results for guild {guild}")
 
     display_date = get_display_date(since, until)
-    data = await get_opponent_data(guild_name, server_number, since, until)
-    summary = get_opponent_summary(data) if data else ""
+    data = await get_records_data(guild_name, server_number, since, until, True)
+    summary = get_records_summary(data, True) if data else ""
 
-    paginator = OpponentPaginator(
+    paginator = RecordsPaginator(
+        data=data,
+        guild_name=f"{guild_name} (S{server_number})",
+        display_date=display_date,
+        summary=summary,
+        interaction=i,
+        opponent=True,
+    )
+    await paginator.send_message(i)
+
+
+@bot.tree.command(description="Check your guild stats")
+@app_commands.autocomplete(since=date_autocomplete, until=date_autocomplete)
+@app_commands.describe(
+    since="Date in YYYY-mm-dd format", until="Date in YYYY-mm-dd format"
+)
+async def my_guild(i: Interaction, since: str = None, until: str = None):
+    await i.response.defer()
+    guild_id = await get_guild_from_member(i.user.id)
+    if guild_id is None:
+        return await i.followup.send(
+            "You're not registered in any guild, use the `/register_guild` command first"
+        )
+    _, guild_name, server_number = await get_guild_by_id(guild_id)
+
+    display_date = get_display_date(since, until)
+    data = await get_records_data(guild_name, server_number, since, until)
+    summary = get_records_summary(data) if data else ""
+
+    paginator = RecordsPaginator(
         data=data,
         guild_name=f"{guild_name} (S{server_number})",
         display_date=display_date,

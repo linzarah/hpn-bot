@@ -262,12 +262,17 @@ async def get_latest_date():
             return res[0]
 
 
-async def get_opponent_data(guild_name, server_number, since=None, until=None):
-    query = """
-        SELECT server_number, guild_name, points_scored, opponent_scored, date, result
+async def get_records_data(
+    guild_name, server_number, since=None, until=None, opponent=False
+):
+    if opponent:
+        query = """SELECT server_number, guild_name, opponent_scored, points_scored, date, result
         FROM submissions
-        WHERE opponent_guild = %s AND opponent_server = %s
-    """
+        WHERE opponent_guild = %s AND opponent_server = %s"""
+    else:
+        query = """SELECT opponent_server, opponent_guild, points_scored, opponent_scored, date, result
+        FROM submissions
+        WHERE guild_name = %s AND server_number = %s"""
     params = [guild_name, server_number]
 
     if since is not None:
@@ -315,3 +320,13 @@ async def get_missing_submissions(since):
                 guilds[guild_id]["members"].append(user_id)
 
     return list(guilds.values())
+
+
+async def get_guild_from_member(user_id):
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                "SELECT guild_id FROM members WHERE user_id = %s",
+                (user_id,),
+            )
+            return await cursor.fetchone()
