@@ -614,11 +614,23 @@ async def register_member(i: Interaction, guild: str, member: Member):
 )
 async def submit(i: Interaction, war: Attachment, league: Attachment):
     await i.response.defer()
+    guild_id = await get_guild_from_member(i.user.id)
+    if guild_id is None:
+        return await i.followup.send(
+            "You're not registered in any guild, use the `/register_guild` command first"
+        )
+    _, guild_name, server_number = await get_guild_by_id(guild_id)
 
     try:
         war_data = extract_war(await war.read())
         league_data = extract_league(await league.read())
-        id_ = await add_submission(**war_data, **league_data, submitted_by=i.user.name)
+        id_ = await add_submission(
+            guild_name=guild_name,
+            server_number=server_number,
+            **war_data,
+            **league_data,
+            submitted_by=i.user.name,
+        )
     except Exception as e:
         logging.error(e)
         n = len(os.listdir("fails"))
@@ -634,10 +646,14 @@ async def submit(i: Interaction, war: Attachment, league: Attachment):
     )
     embed.set_footer(text=f"Submission ID: {id_}")
     labels = {}
-    for data in (war_data, league_data):
+    for data in (
+        {"guild_name": guild_name, "server_number": server_number},
+        war_data,
+        league_data,
+    ):
         for key, value in data.items():
             labels[key] = value
-            embed.add_field(name=key, value=value if value else "???")
+            embed.add_field(name=key, value=value if value is not None else "???")
 
     view = AmendView()
     view.message = await i.followup.send(embed=embed, view=view)

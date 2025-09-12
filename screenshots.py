@@ -9,8 +9,6 @@ import pytesseract
 from PIL import Image
 
 WAR_COORDS = {
-    "server_number": (0.37, 0.1, 0.457, 0.14),
-    "guild_name": (0.23, 0.15, 0.457, 0.2),
     "points_scored": (0.335, 0.21, 0.405, 0.26),
     "opponent_server": (0.67, 0.1, 0.766, 0.14),
     "opponent_guild": (0.67, 0.15, 0.87, 0.2),
@@ -55,11 +53,6 @@ LEAGUES = {
     "Earl": {"Earl", "Comte"},
     "Marquis": {"Marquis", "Marchese"},
 }
-GUILD_MATCHES = {
-    "LOADS OF AAGIIAAOK": "LORDS OF RAGNAROK",
-    "4 THE PRIMARCHS &": "THE PRIMARCHS",
-    "CAIC5IK! Hello!": "こんにちは! Hello!",
-}
 
 
 def extract_war(img_bytes, debug=False):
@@ -74,7 +67,6 @@ def extract_war(img_bytes, debug=False):
         if key in (
             "points_scored",
             "opponent_scored",
-            "server_number",
             "opponent_server",
         ):
             number = re.search(r"\d+", label)
@@ -87,7 +79,7 @@ def extract_war(img_bytes, debug=False):
                 logging.error(e)
                 data = None
         else:
-            data = GUILD_MATCHES[label] if label in GUILD_MATCHES else label
+            data = label
         result[key] = data
 
     return result
