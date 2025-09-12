@@ -411,8 +411,8 @@ class PaginatorView(View):
         next_disable = self.paginator.page >= self.paginator.total_pages
         self.children[0].disabled = last_disable
         self.children[1].disabled = last_disable
-        self.children[-2].disabled = next_disable
-        self.children[-1].disabled = next_disable
+        self.children[3].disabled = next_disable
+        self.children[4].disabled = next_disable
 
     @button(
         emoji="⏪",
