@@ -105,7 +105,9 @@ async def get_guild_by_id(guild):
             return await cursor.fetchone()
 
 
-async def add_guild(guild_name, server_number, user_id, username, registered_at) -> bool:
+async def add_guild(
+    guild_name, server_number, user_id, username, registered_at
+) -> bool:
     async with pool.acquire() as conn:
         async with conn.cursor() as cursor:
             try:
@@ -281,3 +283,35 @@ async def get_opponent_data(guild_name, server_number, since=None, until=None):
         async with conn.cursor() as cursor:
             await cursor.execute(query, params)
             return await cursor.fetchall()
+
+
+async def get_missing_submissions(since):
+    query = """SELECT g.id, g.guild_name, g.server_number, m.user_id
+        FROM guilds g
+        LEFT JOIN submissions s 
+            ON g.guild_name = s.guild_name
+        AND g.server_number = s.server_number
+        AND s.date >= %s
+        LEFT JOIN members m
+            ON g.id = m.guild_id
+        WHERE s.guild_name IS NULL;
+        """
+
+    async with pool.acquire() as conn, conn.cursor() as cursor:
+        await cursor.execute(query, (since,))
+        rows = await cursor.fetchall()
+        if not rows:
+            return []
+
+        guilds = {}
+        for guild_id, guild_name, server_number, user_id in rows:
+            if guild_id not in guilds:
+                guilds[guild_id] = {
+                    "guild_name": guild_name,
+                    "server_number": server_number,
+                    "members": [],
+                }
+            if user_id:
+                guilds[guild_id]["members"].append(user_id)
+
+    return list(guilds.values())

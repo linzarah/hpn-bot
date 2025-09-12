@@ -1,14 +1,18 @@
 import asyncio
 import contextlib
+import csv
+import io
 import logging
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+from typing import Literal
 
 from discord import (
     Attachment,
     ButtonStyle,
     Color,
     Embed,
+    File,
     Intents,
     Interaction,
     Member,
@@ -33,6 +37,7 @@ from database import (
     get_guilds_from_name,
     get_latest_date,
     get_leaderboard,
+    get_missing_submissions,
     get_opponent_data,
     get_opponent_guilds_from_name,
 )
@@ -198,11 +203,123 @@ class OpponentPaginator:
             await i.followup.send(embed=self.embed)
 
 
+class MissingSubmissionPaginator:
+    def __init__(self, data, period, interaction, **kwargs) -> None:
+        self.data: dict[int, dict] = data
+        self.period: str = period
+        self.i: Interaction = interaction
+        self.ITEMS_PER_PAGE = 25
+        self.view = (
+            PaginatorView(self.i, self, missing_submissions=data, timeout=300)
+            if len(self.data) > self.ITEMS_PER_PAGE
+            else None
+        )
+
+        self.page = kwargs.get("page", 1)
+        calculation = len(self.data) / self.ITEMS_PER_PAGE
+        self.total_pages = (
+            int(calculation) if calculation.is_integer() else int(calculation) + 1
+        )
+        if self.total_pages == 0:
+            self.total_pages = 1
+
+    def _get_rows(self):
+        return self.data[
+            (self.page - 1) * self.ITEMS_PER_PAGE : self.page * self.ITEMS_PER_PAGE
+        ]
+
+    def _build_embed(self):
+        embed = Embed(
+            title=f"Missing submissions - {self.period}",
+            description="" if self.data else "No results found",
+            color=Color.dark_gold(),
+        )
+
+        for guild_d in self._get_rows():
+            members = [f"<@{member_id}>" for member_id in guild_d["members"]]
+            embed.add_field(
+                name=f"{guild_d['guild_name']} (S{guild_d['server_number']})",
+                value=", ".join(members),
+            )
+
+        embed.set_footer(text=f"Page {self.page}/{self.total_pages}")
+        return embed
+
+    @property
+    def embed(self) -> Embed:
+        return self._build_embed()
+
+    async def send_message(self, i: Interaction):
+        if not i.command:
+            self.view.update_buttons()
+            await i.followup.edit_message(
+                message_id=i.message.id, embed=self.embed, view=self.view
+            )
+        elif self.view:
+            await i.followup.send(embed=self.embed, view=self.view)
+        else:
+            await i.followup.send(embed=self.embed)
+
+
+class RemindButton(Button):
+    def __init__(self, missing_submissions):
+        super().__init__(
+            style=ButtonStyle.blurple,
+            label="Remind all",
+            emoji="🔔",
+            row=2,
+        )
+        self.members = [m for g in missing_submissions for m in g["members"]]
+
+    async def callback(self, i: Interaction):
+        start = await i.followup.send("Started sending notification DM's...", wait=True)
+        embed = Embed(
+            title="Screenshot submission reminder",
+            description="Hello 👋,\n\nI'm the HPN bot! My goal is to provide an accurate daily leaderboard by gathering information submitted by guilds, but your guild has no recent war submissions.\n\nGuilds are requested to do daily screenshots of GC, but membership requires at least one submission every week. Please submit information soon, as your guild may receive a strike per our <#1325808876293193790>\n\nThank you for being a part of our community!",
+            color=Color.orange(),
+        )
+        for member_id in self.members:
+            member = await i.guild.fetch_member(member_id)
+            await member.send(embed=embed)
+            await asyncio.sleep(10)
+        await start.edit(content="Submission reminders sent successfully ✅")
+
+
+class ExtractCSVButton(Button):
+    def __init__(self, missing_submissions):
+        super().__init__(
+            style=ButtonStyle.secondary,
+            label="Extract data to CSV",
+            emoji="🖨️",
+            row=2,
+        )
+        self.missing_submissions: list[dict] = missing_submissions
+
+    async def callback(self, i: Interaction):
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["guild_name", "server_number", "members"])
+
+        for g in self.missing_submissions:
+            members_str = ", ".join(map(str, g["members"]))
+            writer.writerow([g["guild_name"], g["server_number"], members_str])
+        output.seek(0)
+        file = File(
+            io.BytesIO(output.getvalue().encode()), filename="missing_guilds.csv"
+        )
+        await i.followup.send("Guilds missing submissions exported", file=file)
+
+
 class PaginatorView(View):
-    def __init__(self, i, paginator, *args, **kwargs):
+    def __init__(self, i, paginator, missing_submissions=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.i: Interaction = i
-        self.paginator: LeaderboardPaginator | OpponentPaginator = paginator
+        self.paginator: (
+            LeaderboardPaginator | MissingSubmissionPaginator | OpponentPaginator
+        ) = paginator
+        if isinstance(paginator, MissingSubmissionPaginator):
+            self.add_item(RemindButton(missing_submissions))
+            self.add_item(ExtractCSVButton(missing_submissions))
 
     async def on_timeout(self):
         if self.paginator.i:
@@ -213,9 +330,7 @@ class PaginatorView(View):
     async def interaction_check(self, i: Interaction) -> bool:
         await i.response.defer()
         if i.user != self.i.user:
-            await i.followup.send(
-                "This is not your leaderboard.",
-            )
+            await i.followup.send("This is not your embed.")
             return False
         return True
 
@@ -597,6 +712,56 @@ async def check_opponent(
         summary=summary,
         interaction=i,
     )
+    await paginator.send_message(i)
+
+
+def get_since_from_period(period):
+    today = date.today()
+
+    ranges = {
+        "Today": today,
+        "Yesterday": today - timedelta(days=1),
+        "Current season": today.replace(day=1),
+    }
+
+    if period.startswith("Last "):
+        n_days = int(period.split()[1])
+        since = today - timedelta(days=n_days)
+    elif period in ranges:
+        since = ranges[period]
+    else:
+        raise ValueError(f"Unsupported time slot: {period}")
+    return since
+
+
+@bot.tree.command(
+    description="Check guilds that didn't submit screenshots in the chosen period of time"
+)
+async def missing_submissions(
+    i: Interaction,
+    period: Literal[
+        "Today",
+        "Yesterday",
+        "Last 3 days",
+        "Last 5 days",
+        "Last 7 days",
+        "Last 10 days",
+        "Last 15 days",
+        "Current season",
+    ],
+):
+    if not i.user.guild_permissions.manage_guild:
+        await i.response.send_message(
+            "❌ You must have 'Manage Server' permission to check missing submissions.",
+            ephemeral=True,
+        )
+        return
+    await i.response.defer()
+
+    since = get_since_from_period(period)
+
+    data = await get_missing_submissions(since)
+    paginator = MissingSubmissionPaginator(data, period, i)
     await paginator.send_message(i)
 
 
