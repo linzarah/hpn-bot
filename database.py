@@ -112,11 +112,15 @@ async def add_submission(
         async with conn.cursor() as cursor:
             await cursor.execute(
                 """
-                INSERT INTO submissions (points_scored, opponent_server, opponent_guild,
+                INSERT INTO submissions (
+                    guild_id, points_scored, opponent_server, opponent_guild,
                     opponent_scored, date, total_points, league, division, submitted_by
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                SELECT m.guild_id, %s, %s, %s, %s, %s, %s, %s, %s, m.user_id
+                FROM members m
+                WHERE m.user_id = %s
                 ON DUPLICATE KEY UPDATE
+                    guild_id = VALUES(guild_id),
                     points_scored = VALUES(points_scored),
                     opponent_server = VALUES(opponent_server),
                     opponent_guild = VALUES(opponent_guild),
@@ -155,8 +159,6 @@ async def edit_label(record_id: int, label: str, new_value) -> bool:
     async with pool.acquire() as conn:
         async with conn.cursor() as cursor:
             if label not in {
-                "server_number",
-                "guild_name",
                 "points_scored",
                 "opponent_server",
                 "opponent_guild",
@@ -165,7 +167,6 @@ async def edit_label(record_id: int, label: str, new_value) -> bool:
                 "total_points",
                 "league",
                 "division",
-                "submitted_by",
             }:
                 raise ValueError(f"Invalid label: {label}")
 
@@ -218,14 +219,14 @@ async def get_records_data(guild_id, since=None, until=None, opponent=False):
     if opponent:
         query = """SELECT server_number, guild_name, opponent_scored, points_scored, date, result
         FROM submissions
-        JOIN guilds ON guild.id = guild_id
+        JOIN guilds ON guilds.id = guild_id
         WHERE opponent_guild = %s AND opponent_server = %s"""
         params = guild_id
     else:
         query = """SELECT opponent_server, opponent_guild, points_scored, opponent_scored, date, result
         FROM submissions
-        WHERE guild_name = %s AND server_number = %s"""
-        params = (guild_id,)
+        WHERE guild_id = %s"""
+        params = [guild_id,]
 
     if since is not None:
         query += " AND date >= %s"

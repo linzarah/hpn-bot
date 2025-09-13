@@ -765,7 +765,7 @@ async def check_opponent(
         return await i.followup.send(f"Couldn't find results for guild {guild}")
 
     display_date = get_display_date(since, until)
-    data = await get_records_data((guild_name, server_number), since, until, True)
+    data = await get_records_data([guild_name, server_number], since, until, True)
     summary = get_records_summary(data, True) if data else ""
 
     paginator = RecordsPaginator(
