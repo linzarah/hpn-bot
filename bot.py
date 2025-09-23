@@ -332,7 +332,10 @@ class RemindButton(Button):
             color=Color.orange(),
         )
         for member_id in self.members:
-            member = await i.guild.fetch_member(member_id)
+            try:
+                member = await i.guild.fetch_member(member_id)
+            except NotFound:
+                continue
             await member.send(embed=embed)
             await asyncio.sleep(10)
         await start.edit(content="Submission reminders sent successfully ✅")
