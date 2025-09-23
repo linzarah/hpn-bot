@@ -75,18 +75,16 @@ class DiscordBot(commands.Bot):
 
 bot = DiscordBot()
 
-LABELS = [
-    "server_number",
-    "guild_name",
+LABELS = {
     "points_scored",
+    "league",
+    "division",
     "opponent_server",
     "opponent_guild",
     "opponent_scored",
     "date",
-    "league",
-    "division",
     "total_points",
-]
+}
 
 RESULT_MAP = {"Win": "🟩", "Loss": "🟥", "Draw": "⬜"}
 
@@ -471,7 +469,6 @@ class AmendModal(Modal):
             return await i.followup.send("The data wasn't modified...")
 
         if self.label in (
-            "server_number",
             "points_scored",
             "opponent_server",
             "opponent_scored",
@@ -640,9 +637,10 @@ async def submit(i: Interaction, war: Attachment, league: Attachment):
 
     embed = Embed(
         color=Color.green(),
-        title=f"Screenshots recorded ✅ - {guild_name} (S{server_number})",
+        title="Screenshots recorded ✅",
     )
     embed.set_footer(text=f"Submission ID: {id_}")
+    embed.set_author(name=f"{guild_name} (S{server_number})")
     labels = {}
     for data in (
         war_data,
