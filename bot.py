@@ -493,7 +493,7 @@ class AmendModal(Modal):
         try:
             await edit_label(self.id_, self.label, value)
         except Exception as e:
-            logging.error(e)
+            logging.error("FAILED EDIT LABEL", e)
             return await i.followup.send("Failed amending data...")
         await i.followup.send(f"{self.label} was updated to {value}")
         n_embed = self.message.embeds[0]
@@ -630,7 +630,7 @@ async def submit(i: Interaction, war: Attachment, league: Attachment):
             submitted_by=i.user.id,
         )
     except Exception as e:
-        logging.error(e)
+        logging.error("FAILED EXTRACT OR ADD SUBMISSION", e)
         n = len(os.listdir("fails"))
         await war.save(f"fails/war_error{n}.png")
         await league.save(f"fails/league_error{n}.png")

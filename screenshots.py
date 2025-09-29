@@ -76,7 +76,7 @@ def extract_war(img_bytes, debug=False):
             try:
                 data = date(int(year), int(month), int(day))
             except Exception as e:
-                logging.error(e)
+                logging.error(f"FAILED DATE: {label}", e)
                 data = None
         else:
             data = label
