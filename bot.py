@@ -808,6 +808,39 @@ async def my_guild(i: Interaction, since: str = None, until: str = None):
     await paginator.send_message(i)
 
 
+@bot.tree.command(description="Check stats for the chosen guild")
+@app_commands.autocomplete(
+    guild=guild_name_autocomplete, since=date_autocomplete, until=date_autocomplete
+)
+@app_commands.describe(
+    guild="Select the guild",
+    since="Date in YYYY-mm-dd format",
+    until="Date in YYYY-mm-dd format",
+)
+async def check_guild(i: Interaction, guild: str, since: str = None, until: str = None):
+    if not i.user.guild_permissions.manage_guild:
+        await i.response.send_message(
+            "❌ You must have 'Manage Server' permission to rename a guild.",
+            ephemeral=True,
+        )
+        return
+    await i.response.defer()
+    _, guild_name, server_number = await get_guild_by_id(guild)
+
+    display_date = get_display_date(since, until)
+    data = await get_records_data(guild, since, until)
+    summary = get_records_summary(data) if data else ""
+
+    paginator = RecordsPaginator(
+        data=data,
+        guild_name=f"{guild_name} (S{server_number})",
+        display_date=display_date,
+        summary=summary,
+        interaction=i,
+    )
+    await paginator.send_message(i)
+
+
 def get_since_from_period(period):
     today = date.today()
 
