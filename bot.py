@@ -7,6 +7,7 @@ import os
 from datetime import date, datetime, timedelta
 from typing import Literal
 
+from dateutil.relativedelta import relativedelta
 from discord import (
     Attachment,
     ButtonStyle,
@@ -87,6 +88,12 @@ LABELS = {
 }
 
 RESULT_MAP = {"Win": "🟩", "Loss": "🟥", "Draw": "⬜"}
+
+
+def is_staff(i: Interaction):
+    return (
+        i.user.guild_permissions.manage_guild or i.user.guild_permissions.administrator
+    )
 
 
 class ConfirmView(View):
@@ -547,7 +554,7 @@ async def sync(ctx):
 
 @bot.tree.command(description="Register your guild and server")
 async def register_guild(i: Interaction, guild_name: str, server_number: int):
-    if not i.user.guild_permissions.manage_guild:
+    if not is_staff(i):
         await i.response.send_message(
             "❌ You must have 'Manage Server' permission to register a guild.",
             ephemeral=True,
@@ -664,6 +671,21 @@ async def date_autocomplete(
     return [app_commands.Choice(name=str(row[0]), value=str(row[0])) for row in results]
 
 
+async def season_autocomplete(
+    _: Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    months = []
+    today = datetime.today()
+
+    for i in range(20):
+        dt = today - relativedelta(months=i)
+        months.append(dt.strftime("%Y-%m"))
+
+    return [
+        app_commands.Choice(name=f"{month} season", value=month) for month in months
+    ]
+
+
 @bot.tree.command(description="View guilds leaderboard")
 @app_commands.autocomplete(date=date_autocomplete)
 @app_commands.describe(date="Date in YYYY-mm-dd format")
@@ -681,14 +703,10 @@ async def leaderboard(i: Interaction, date: str = None):
     await paginator.send_message(i)
 
 
-def get_display_date(since, until) -> str:
-    if since is None and until is None:
+def get_display_date(season) -> str:
+    if season is None:
         return "All time"
-    if since is None:
-        return f"Until {until}"
-    if until is None:
-        return f"Since {since}"
-    return f"{since} -> {until}"
+    return f"{season} season"
 
 
 def get_formatted_results(results: dict) -> str:
@@ -749,24 +767,21 @@ async def opponent_guild_autocomplete(
 
 @bot.tree.command(description="Check opponent stats")
 @app_commands.autocomplete(
-    guild=opponent_guild_autocomplete, since=date_autocomplete, until=date_autocomplete
+    guild=opponent_guild_autocomplete, season=season_autocomplete
 )
 @app_commands.describe(
     guild="Select the guild",
-    since="Date in YYYY-mm-dd format",
-    until="Date in YYYY-mm-dd format",
+    season="Choose the season",
 )
-async def check_opponent(
-    i: Interaction, guild: str, since: str = None, until: str = None
-):
+async def check_opponent(i: Interaction, guild: str, season: str = None):
     await i.response.defer()
     try:
         guild_name, server_number = guild.split("///")
     except ValueError:
         return await i.followup.send(f"Couldn't find results for guild {guild}")
 
-    display_date = get_display_date(since, until)
-    data = await get_records_data([guild_name, server_number], since, until, True)
+    display_date = get_display_date(season)
+    data = await get_records_data([guild_name, server_number], season, True)
     summary = get_records_summary(data, True) if data else ""
 
     paginator = RecordsPaginator(
@@ -781,11 +796,9 @@ async def check_opponent(
 
 
 @bot.tree.command(description="Check your guild stats")
-@app_commands.autocomplete(since=date_autocomplete, until=date_autocomplete)
-@app_commands.describe(
-    since="Date in YYYY-mm-dd format", until="Date in YYYY-mm-dd format"
-)
-async def my_guild(i: Interaction, since: str = None, until: str = None):
+@app_commands.autocomplete(season=season_autocomplete)
+@app_commands.describe(season="Choose the season")
+async def my_guild(i: Interaction, season: str = None):
     await i.response.defer()
     guild_id = await get_guild_from_member(i.user.id)
     if guild_id is None:
@@ -794,8 +807,8 @@ async def my_guild(i: Interaction, since: str = None, until: str = None):
         )
     _, guild_name, server_number = await get_guild_by_id(guild_id)
 
-    display_date = get_display_date(since, until)
-    data = await get_records_data(guild_id, since, until)
+    display_date = get_display_date(season)
+    data = await get_records_data(guild_id, season)
     summary = get_records_summary(data) if data else ""
 
     paginator = RecordsPaginator(
@@ -809,26 +822,20 @@ async def my_guild(i: Interaction, since: str = None, until: str = None):
 
 
 @bot.tree.command(description="Check stats for the chosen guild")
-@app_commands.autocomplete(
-    guild=guild_name_autocomplete, since=date_autocomplete, until=date_autocomplete
-)
-@app_commands.describe(
-    guild="Select the guild",
-    since="Date in YYYY-mm-dd format",
-    until="Date in YYYY-mm-dd format",
-)
-async def check_guild(i: Interaction, guild: str, since: str = None, until: str = None):
-    if not i.user.guild_permissions.manage_guild:
+@app_commands.autocomplete(guild=guild_name_autocomplete, season=season_autocomplete)
+@app_commands.describe(guild="Select the guild", season="Choose the season")
+async def check_guild(i: Interaction, guild: str, season: str = None):
+    if not is_staff(i):
         await i.response.send_message(
-            "❌ You must have 'Manage Server' permission to rename a guild.",
+            "❌ You must have 'Manage Server' permission to check a guild.",
             ephemeral=True,
         )
         return
     await i.response.defer()
     _, guild_name, server_number = await get_guild_by_id(guild)
 
-    display_date = get_display_date(since, until)
-    data = await get_records_data(guild, since, until)
+    display_date = get_display_date(season)
+    data = await get_records_data(guild, season)
     summary = get_records_summary(data) if data else ""
 
     paginator = RecordsPaginator(
@@ -876,7 +883,7 @@ async def missing_submissions(
         "Current season",
     ],
 ):
-    if not i.user.guild_permissions.manage_guild:
+    if not is_staff(i):
         await i.response.send_message(
             "❌ You must have 'Manage Server' permission to check missing submissions.",
             ephemeral=True,
@@ -895,7 +902,7 @@ async def missing_submissions(
 @app_commands.describe(guild="Select the guild")
 @app_commands.autocomplete(guild=guild_name_autocomplete)
 async def guild_rename(i: Interaction, guild: str, new_name: str):
-    if not i.user.guild_permissions.manage_guild:
+    if not is_staff(i):
         await i.response.send_message(
             "❌ You must have 'Manage Server' permission to rename a guild.",
             ephemeral=True,
@@ -914,7 +921,7 @@ async def guild_rename(i: Interaction, guild: str, new_name: str):
 @app_commands.describe(guild="Select the guild")
 @app_commands.autocomplete(guild=guild_name_autocomplete)
 async def guild_set_server(i: Interaction, guild: str, new_server: int):
-    if not i.user.guild_permissions.manage_guild:
+    if not is_staff(i):
         await i.response.send_message(
             "❌ You must have 'Manage Server' permission to reset a guild's server.",
             ephemeral=True,
@@ -933,7 +940,7 @@ async def guild_set_server(i: Interaction, guild: str, new_server: int):
 @app_commands.describe(guild="Select the guild")
 @app_commands.autocomplete(guild=guild_name_autocomplete)
 async def delete_guild(i: Interaction, guild: str):
-    if not i.user.guild_permissions.manage_guild:
+    if not is_staff(i):
         await i.response.send_message(
             "❌ You must have 'Manage Server' permission to delete a guild.",
             ephemeral=True,

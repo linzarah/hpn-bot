@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 import aiomysql
 from dotenv import load_dotenv
@@ -7,6 +8,10 @@ from pymysql.err import IntegrityError
 load_dotenv()
 
 pool: aiomysql.Pool = None
+
+
+def now():
+    return datetime.now()
 
 
 async def connect_db():
@@ -215,25 +220,27 @@ async def get_latest_date():
             return res[0]
 
 
-async def get_records_data(guild_id, since=None, until=None, opponent=False):
+async def get_records_data(
+    guild_data: str | list[str, int], season: str = None, opponent=False
+):
     if opponent:
         query = """SELECT server_number, guild_name, opponent_scored, points_scored, date, result
         FROM submissions
         JOIN guilds ON guilds.id = guild_id
         WHERE opponent_guild = %s AND opponent_server = %s"""
-        params = guild_id
+        params = guild_data
     else:
         query = """SELECT opponent_server, opponent_guild, points_scored, opponent_scored, date, result
         FROM submissions
         WHERE guild_id = %s"""
-        params = [guild_id,]
+        params = [
+            guild_data,
+        ]
 
-    if since is not None:
-        query += " AND date >= %s"
-        params.append(since)
-    if until is not None:
-        query += " AND date <= %s"
-        params.append(until)
+    if season is not None:
+        year, month = season.split("-")
+        query += " AND YEAR(date) = %s AND MONTH(date) = %s"
+        params.append(year, month)
 
     query += " ORDER BY date DESC"
 
