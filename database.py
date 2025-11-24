@@ -240,7 +240,7 @@ async def get_records_data(
     if season is not None:
         year, month = season.split("-")
         query += " AND YEAR(date) = %s AND MONTH(date) = %s"
-        params.append(year, month)
+        params.extend([year, month])
 
     query += " ORDER BY date DESC"
 
