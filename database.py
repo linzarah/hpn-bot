@@ -290,6 +290,53 @@ async def get_guild_from_member(user_id):
             return await cursor.fetchone()
 
 
+async def give_kudo_and_get_guild_info(guild_id, sender, message):
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                """
+                INSERT INTO kudos (guild_id, sender, message)
+                VALUES (%s, %s, %s)
+                """,
+                (guild_id, sender, message),
+            )
+
+            await cursor.execute(
+                """
+                SELECT g.guild_name, m.user_id
+                FROM guilds g
+                LEFT JOIN members m ON g.id = m.guild_id
+                WHERE g.id = %s
+                """,
+                (guild_id,),
+            )
+
+            rows = await cursor.fetchall()
+
+            if not rows:
+                return None, []
+
+            guild_name = rows[0][0]
+            members = [f"<@{row[1]}>" for row in rows if row[1] is not None]
+
+            return guild_name, members
+
+
+async def get_kudos_history(guild_id):
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                """
+                SELECT sender, message, created_at
+                FROM kudos
+                WHERE guild_id = %s
+                ORDER BY created_at DESC
+                """,
+                (guild_id,),
+            )
+            return await cursor.fetchall()
+
+
 async def rename_guild(guild_id, new_name):
     async with pool.acquire() as conn:
         async with conn.cursor() as cursor:

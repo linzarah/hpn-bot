@@ -18,6 +18,7 @@ from discord import (
     Interaction,
     Member,
     Message,
+    Object,
     SelectOption,
     app_commands,
 )
@@ -37,11 +38,13 @@ from database import (
     get_guild_by_id,
     get_guild_from_member,
     get_guilds_from_name,
+    get_kudos_history,
     get_latest_date,
     get_leaderboard,
     get_missing_submissions,
     get_opponent_guilds_from_name,
     get_records_data,
+    give_kudo_and_get_guild_info,
     rename_guild,
     reset_guild_server,
 )
@@ -58,6 +61,8 @@ logging.basicConfig(
 load_dotenv()
 
 TOKEN = os.getenv("TOKEN")
+MAIN_GUILD = 1325720729240600627
+KUDOS_CHANNEL = 1442610115860631642
 
 intents = Intents.default()
 intents.message_content = True
@@ -549,6 +554,7 @@ class AmendView(View):
 @commands.is_owner()
 async def sync(ctx):
     await bot.tree.sync()
+    await bot.tree.sync(guild=Object(MAIN_GUILD))
     await ctx.send("Commands synced!")
 
 
@@ -819,6 +825,61 @@ async def my_guild(i: Interaction, season: str = None):
         interaction=i,
     )
     await paginator.send_message(i)
+
+
+@bot.tree.command(description="Give kudos to a guild")
+@app_commands.describe(guild="Select the guild")
+@app_commands.autocomplete(guild=guild_name_autocomplete)
+@app_commands.guilds(MAIN_GUILD)
+async def give_kudos(i: Interaction, guild: str, message: str):
+    await i.response.defer()
+
+    guild_name, members = await give_kudo_and_get_guild_info(
+        guild, i.user.display_name, message
+    )
+    if not guild_name:
+        return await i.followup.send("❌ Guild not found", ephemeral=True)
+
+    embed = Embed(
+        color=Color.green(),
+        title=f"{guild_name} received kudos",
+        description=message,
+        timestamp=datetime.now(),
+    )
+    embed.set_author(name=i.user.display_name, icon_url=i.user.display_avatar.url)
+    channel = i.guild.get_channel(KUDOS_CHANNEL)
+    await channel.send(", ".join(members), embed=embed)
+    await i.followup.send("✅ Kudos given to this guild.", ephemeral=True)
+
+
+@bot.tree.command(description="See kudos history for the chosen guild")
+@app_commands.describe(guild="Select the guild")
+@app_commands.autocomplete(guild=guild_name_autocomplete)
+async def guild_kudos(i: Interaction, guild: str):
+    await i.response.defer()
+
+    rows = get_kudos_history(guild)
+    if not rows:
+        embed = Embed(
+            color=Color.green(),
+            title="Kudos History",
+            description="This guild has no kudos yet!",
+        )
+        return await i.followup.send(embed=embed)
+
+    description_lines = []
+    for sender, message, created_at in rows:
+        description_lines.append(
+            f"**{sender}** — *{created_at:%Y-%m-%d %H:%M}*\n> {message}"
+        )
+
+    embed = Embed(
+        color=Color.green(),
+        title="Kudos History",
+        description="\n\n".join(description_lines),
+    )
+
+    await i.followup.send(embed=embed)
 
 
 @bot.tree.command(description="Check stats for the chosen guild")
