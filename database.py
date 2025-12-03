@@ -93,11 +93,9 @@ async def add_member(member, guild_id):
     async with pool.acquire() as conn:
         async with conn.cursor() as cursor:
             await cursor.execute(
-                """
-                INSERT INTO members (user_id, username, guild_id)
+                """INSERT INTO members (user_id, username, guild_id)
                 VALUES (%s, %s, %s)
-                ON DUPLICATE KEY UPDATE username = VALUES(username), guild_id = VALUES(guild_id)
-                """,
+                ON DUPLICATE KEY UPDATE username = VALUES(username), guild_id = VALUES(guild_id)""",
                 (member.id, member.name, guild_id),
             )
 
@@ -116,8 +114,7 @@ async def add_submission(
     async with pool.acquire() as conn:
         async with conn.cursor() as cursor:
             await cursor.execute(
-                """
-                INSERT INTO submissions (
+                """INSERT INTO submissions (
                     guild_id, points_scored, opponent_server, opponent_guild,
                     opponent_scored, date, total_points, league, division, submitted_by
                 )
@@ -133,8 +130,7 @@ async def add_submission(
                     total_points = VALUES(total_points),
                     league = VALUES(league),
                     division = VALUES(division),
-                    submitted_by = VALUES(submitted_by)
-                """,
+                    submitted_by = VALUES(submitted_by)""",
                 (
                     points_scored,
                     opponent_server,
@@ -293,21 +289,18 @@ async def get_guild_from_member(user_id):
 async def give_kudo_and_get_guild_info(guild_id, sender, message):
     async with pool.acquire() as conn:
         async with conn.cursor() as cursor:
+            print(message)
             await cursor.execute(
-                """
-                INSERT INTO kudos (guild_id, sender, message)
-                VALUES (%s, %s, %s)
-                """,
+                """INSERT INTO kudos (guild_id, sender, message)
+                VALUES (%s, %s, %s)""",
                 (guild_id, sender, message),
             )
 
             await cursor.execute(
-                """
-                SELECT g.guild_name, m.user_id
+                """SELECT g.guild_name, m.user_id
                 FROM guilds g
                 LEFT JOIN members m ON g.id = m.guild_id
-                WHERE g.id = %s
-                """,
+                WHERE g.id = %s""",
                 (guild_id,),
             )
 
@@ -326,12 +319,10 @@ async def get_kudos_history(guild_id):
     async with pool.acquire() as conn:
         async with conn.cursor() as cursor:
             await cursor.execute(
-                """
-                SELECT sender, message, created_at
+                """SELECT sender, message, created_at
                 FROM kudos
                 WHERE guild_id = %s
-                ORDER BY created_at DESC
-                """,
+                ORDER BY created_at DESC""",
                 (guild_id,),
             )
             return await cursor.fetchall()

@@ -828,12 +828,12 @@ async def my_guild(i: Interaction, season: str = None):
 
 
 @bot.tree.command(description="Give kudos to a guild")
-@app_commands.describe(guild="Select the guild")
+@app_commands.describe(
+    guild="Select the guild", message="What would you like to give kudos for?"
+)
 @app_commands.autocomplete(guild=guild_name_autocomplete)
-@app_commands.guilds(MAIN_GUILD)
 async def give_kudos(i: Interaction, guild: str, message: str):
     await i.response.defer()
-
     guild_name, members = await give_kudo_and_get_guild_info(
         guild, i.user.display_name, message
     )
@@ -847,7 +847,7 @@ async def give_kudos(i: Interaction, guild: str, message: str):
         timestamp=datetime.now(),
     )
     embed.set_author(name=i.user.display_name, icon_url=i.user.display_avatar.url)
-    channel = i.guild.get_channel(KUDOS_CHANNEL)
+    channel = bot.get_channel(KUDOS_CHANNEL)
     await channel.send(", ".join(members), embed=embed)
     await i.followup.send("✅ Kudos given to this guild.", ephemeral=True)
 
@@ -858,7 +858,7 @@ async def give_kudos(i: Interaction, guild: str, message: str):
 async def guild_kudos(i: Interaction, guild: str):
     await i.response.defer()
 
-    rows = get_kudos_history(guild)
+    rows = await get_kudos_history(guild)
     if not rows:
         embed = Embed(
             color=Color.green(),
