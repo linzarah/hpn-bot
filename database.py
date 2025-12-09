@@ -289,7 +289,6 @@ async def get_guild_from_member(user_id):
 async def give_kudo_and_get_guild_info(guild_id, sender, message):
     async with pool.acquire() as conn:
         async with conn.cursor() as cursor:
-            print(message)
             await cursor.execute(
                 """INSERT INTO kudos (guild_id, sender, message)
                 VALUES (%s, %s, %s)""",

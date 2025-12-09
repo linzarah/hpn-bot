@@ -55,6 +55,11 @@ LEAGUES = {
 }
 
 
+pytesseract.pytesseract.tesseract_cmd = (
+    "C:\\Users\\jose-miguel\\AppData\\Local\\Programs\\Tesseract-OCR\\tesseract.exe"
+)
+
+
 def extract_war(img_bytes, debug=False):
     panel, W, H = _adjust_screenshot(img_bytes)
 
