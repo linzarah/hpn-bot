@@ -97,7 +97,9 @@ RESULT_MAP = {"Win": "🟩", "Loss": "🟥", "Draw": "⬜"}
 
 def is_staff(i: Interaction):
     return (
-        i.user.guild_permissions.manage_guild or i.user.guild_permissions.administrator
+        i.user.guild_permissions.manage_guild
+        or i.user.guild_permissions.administrator
+        or Object(1363113680916709376) in i.user.roles
     )
 
 
