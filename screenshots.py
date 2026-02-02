@@ -72,8 +72,8 @@ def extract_war(img_bytes, debug=False):
             number = re.search(r"\d+", label)
             data = int(number.group()) if number and number.group().isdigit() else None
         elif key == "date":
-            day, month, year = label.removesuffix(" J").split("/")
             try:
+                day, month, year = label.removesuffix(" J").split("/")
                 data = date(int(year), int(month), int(day))
             except Exception as e:
                 logging.error(f"FAILED DATE: {label}", e)
