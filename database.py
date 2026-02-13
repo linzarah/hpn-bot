@@ -100,6 +100,16 @@ async def add_member(member, guild_id):
             )
 
 
+async def remove_inactive_members(active_user_ids):
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                """DELETE FROM members
+                WHERE user_id NOT IN (%s)""",
+                (",".join(str(uid) for uid in active_user_ids),),
+            )
+
+
 async def add_submission(
     points_scored,
     opponent_server,

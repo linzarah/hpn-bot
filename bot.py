@@ -45,6 +45,7 @@ from database import (
     get_opponent_guilds_from_name,
     get_records_data,
     give_kudo_and_get_guild_info,
+    remove_inactive_members,
     rename_guild,
     reset_guild_server,
 )
@@ -621,6 +622,25 @@ async def register_member(i: Interaction, guild: str, member: Member):
     await i.followup.send(
         f"✅ {member.mention}, you have been registered to guild **{guild_name}** (Server {server_number}).",
     )
+
+
+@bot.tree.command(description="Remove members that left the server from the database")
+async def purge_inactive_members(i: Interaction):
+    await i.response.defer()
+    if not is_staff(i):
+        return await i.followup.send(
+            "❌ You must have 'Manage Server' permission to purge inactive members.",
+            ephemeral=True,
+        )
+    guild = bot.get_guild(MAIN_GUILD)
+    if guild is None:
+        return await i.followup.send(
+            "❌ Could not find the main guild.",
+            ephemeral=True,
+        )
+    active_user_ids = [member.id for member in guild.members if not member.bot]
+    await remove_inactive_members(active_user_ids)
+    await i.followup.send("✅ Inactive members removed successfully.")
 
 
 @bot.tree.command(description="Submit screenshots to register results")
