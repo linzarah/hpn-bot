@@ -4,6 +4,7 @@ import csv
 import io
 import logging
 import os
+import traceback
 from datetime import date, datetime, timedelta
 from typing import Literal
 
@@ -1073,6 +1074,16 @@ async def submission_reminder(i: Interaction):
         "Thank you for being a part of our community!",
     )
     await i.channel.send(role.mention, embed=embed)
+
+
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.NotOwner):
+        await ctx.send("You don't have permission to use this command.")
+    else:
+        logging.error(f"Error in command {ctx.command}: {error}")
+        traceback.print_exception(type(error), error, error.__traceback__)
+        await ctx.send("An error occurred while processing the command.")
 
 
 async def main():
