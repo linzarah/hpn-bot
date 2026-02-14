@@ -19,6 +19,7 @@ from discord import (
     Member,
     Message,
     Object,
+    PermissionOverwrite,
     SelectOption,
     app_commands,
 )
@@ -38,6 +39,7 @@ from database import (
     get_guild_by_id,
     get_guild_from_member,
     get_guilds_from_name,
+    get_inactive_members,
     get_kudos_history,
     get_latest_date,
     get_leaderboard,
@@ -64,6 +66,7 @@ load_dotenv()
 TOKEN = os.getenv("TOKEN")
 MAIN_GUILD = 1325720729240600627
 KUDOS_CHANNEL = 1442610115860631642
+REMINDER_ROLE = 1419076867930984611
 
 intents = Intents.default()
 intents.message_content = True
@@ -1044,6 +1047,32 @@ async def delete_guild(i: Interaction, guild: str):
         await i.followup.send("✅ Guild deleted successfully.")
     else:
         await i.followup.send("Operation cancelled ❌")
+
+
+@bot.tree.command(
+    description="Remind guilds that haven't submitted screenshots in the last 15 days"
+)
+async def submission_reminder(i: Interaction):
+    member_ids = await get_inactive_members()
+    if not member_ids:
+        return
+    role = i.guild.get_role(REMINDER_ROLE)
+    for member_id in member_ids:
+        member = i.guild.get_member(member_id)
+        if member:
+            await member.add_roles(role, reason="Submission reminder")
+    await i.channel.edit(
+        overwrites={role: PermissionOverwrite(view_channel=True)},
+        reason="Submission reminder",
+    )
+    embed = Embed(
+        title="Submission reminder",
+        description="Hello 👋,\n\n"
+        "You haven't submitted screenshots in the last 15 days\n\n"
+        "Please submit screenshots soon, as your guild may receive a strike per our <#1325808876293193790>\n\n"
+        "Thank you for being a part of our community!",
+    )
+    await i.channel.send(role.mention, embed=embed)
 
 
 async def main():

@@ -110,6 +110,19 @@ async def remove_inactive_members(active_user_ids):
             )
 
 
+async def get_inactive_members():
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                """SELECT m.user_id
+                FROM members m
+                JOIN guilds g ON m.guild_id = g.id
+                LEFT JOIN submissions s ON g.id = s.guild_id AND s.date >= DATE_SUB(NOW(), INTERVAL 15 DAY)
+                WHERE s.guild_id IS NULL""",
+            )
+            return await cursor.fetchall()
+
+
 async def add_submission(
     points_scored,
     opponent_server,
