@@ -642,7 +642,7 @@ async def purge_inactive_members(i: Interaction):
             "❌ Could not find the main guild.",
             ephemeral=True,
         )
-    active_user_ids = [member.id for member in guild.members if not member.bot]
+    active_user_ids = [member.id async for member in guild.fetch_members(limit=None)]
     await remove_inactive_members(active_user_ids)
     await i.followup.send("✅ Inactive members removed successfully.")
 
