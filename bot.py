@@ -1054,14 +1054,18 @@ async def delete_guild(i: Interaction, guild: str):
     description="Remind guilds that haven't submitted screenshots in the last 15 days"
 )
 async def submission_reminder(i: Interaction):
+    await i.response.defer()
     member_ids = await get_inactive_members()
     if not member_ids:
-        return
+        return await i.followup.send("No inactive members found.")
     role = i.guild.get_role(REMINDER_ROLE)
     for member_id in member_ids:
-        member = i.guild.get_member(member_id)
+        member = None
+        with contextlib.suppress(NotFound):
+            member = await i.guild.fetch_member(member_id)
         if member:
             await member.add_roles(role, reason="Submission reminder")
+        await asyncio.sleep(1)
     await i.channel.edit(
         overwrites={role: PermissionOverwrite(view_channel=True)},
         reason="Submission reminder",
@@ -1073,7 +1077,7 @@ async def submission_reminder(i: Interaction):
         "Please submit screenshots soon, as your guild may receive a strike per our <#1325808876293193790>\n\n"
         "Thank you for being a part of our community!",
     )
-    await i.channel.send(role.mention, embed=embed)
+    await i.followup.send(role.mention, embed=embed)
 
 
 @bot.event
