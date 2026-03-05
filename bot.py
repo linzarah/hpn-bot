@@ -403,10 +403,10 @@ class PaginatorView(View):
                 await m.edit(view=None)
 
     async def interaction_check(self, i: Interaction) -> bool:
-        await i.response.defer()
         if i.user != self.i.user:
-            await i.followup.send("This is not your embed.")
+            await i.response.send_message("This is not your embed.", ephemeral=True)
             return False
+        await i.response.defer()
         return True
 
     async def callback(self, interaction: Interaction, button: Button):
