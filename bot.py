@@ -1060,12 +1060,9 @@ async def submission_reminder(i: Interaction):
         return await i.followup.send("No inactive members found.")
     role = i.guild.get_role(REMINDER_ROLE)
     for member_id in member_ids:
-        member = None
-        with contextlib.suppress(NotFound):
-            member = await i.guild.fetch_member(member_id)
+        member = i.guild.get_member(member_id)
         if member:
             await member.add_roles(role, reason="Submission reminder")
-        await asyncio.sleep(1)
     await i.channel.edit(
         overwrites={role: PermissionOverwrite(view_channel=True)},
         reason="Submission reminder",
