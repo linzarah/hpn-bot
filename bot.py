@@ -20,7 +20,6 @@ from discord import (
     Member,
     Message,
     Object,
-    PermissionOverwrite,
     SelectOption,
     app_commands,
 )
@@ -556,6 +555,16 @@ class AmendView(View):
         super().__init__(timeout=None)
         self.add_item(AmendSelect())
 
+    async def interaction_check(self, i: Interaction) -> bool:
+        embed = i.message.embeds[0] if i.message.embeds else None
+        user_id = embed.fields[0].value.strip("<@>") if embed else None
+        if str(i.user.id) != user_id and not is_staff(i):
+            await i.response.send_message(
+                "You don't have permission to amend this data.", ephemeral=True
+            )
+            return False
+        return True
+
 
 @bot.command()
 @commands.is_owner()
@@ -681,6 +690,7 @@ async def submit(i: Interaction, war: Attachment, league: Attachment):
         color=Color.green(),
         title="Screenshots recorded ✅",
     )
+    embed.add_field(name="Submitted by", value=i.user.mention)
     embed.set_footer(text=f"Submission ID: {id_}")
     embed.set_author(name=f"{guild_name} (S{server_number})")
     labels = {}
@@ -1063,10 +1073,8 @@ async def submission_reminder(i: Interaction):
         member = i.guild.get_member(member_id)
         if member:
             await member.add_roles(role, reason="Submission reminder")
-    await i.channel.edit(
-        overwrites={role: PermissionOverwrite(view_channel=True)},
-        reason="Submission reminder",
-    )
+        else:
+            logging.warning(f"Member with ID {member_id} not found in the guild.")
     embed = Embed(
         title="Submission reminder",
         description="Hello 👋,\n\n"
