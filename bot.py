@@ -1080,9 +1080,9 @@ async def submission_reminder(i: Interaction):
             try:
                 await member.add_roles(role, reason="Submission reminder")
             except Forbidden:
-                forbidden.append(member_id)
+                forbidden.append(str(member_id))
         else:
-            notfound.append(member_id)
+            notfound.append((str(member_id)))
     embed = Embed(
         title="Submission reminder",
         description="Hello 👋,\n\n"
