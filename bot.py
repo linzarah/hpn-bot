@@ -58,7 +58,7 @@ logging.basicConfig(
         logging.StreamHandler(),
         logging.FileHandler("error.log"),
     ),
-    level=logging.ERROR,
+    level=logging.info,
 )
 
 load_dotenv()
@@ -80,7 +80,7 @@ class DiscordBot(commands.Bot):
         self.add_view(AmendView())
 
     async def on_ready(self):
-        print(f"Bot started as {self.user} (ID: {self.user.id})")
+        logging.info(f"Bot started as {self.user} (ID: {self.user.id})")
 
 
 bot = DiscordBot()
