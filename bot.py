@@ -23,7 +23,7 @@ from discord import (
     SelectOption,
     app_commands,
 )
-from discord.errors import NotFound
+from discord.errors import Forbidden, NotFound
 from discord.ext import commands
 from discord.ui import Button, Modal, Select, TextInput, View, button
 from discord.utils import setup_logging
@@ -1072,15 +1072,17 @@ async def submission_reminder(i: Interaction):
     if not member_ids:
         return await i.followup.send("No inactive members found.")
     role = i.guild.get_role(REMINDER_ROLE)
+    forbidden = []
+    notfound = []
     for member_id in member_ids:
         member = i.guild.get_member(member_id)
         if member:
-            await member.add_roles(role, reason="Submission reminder")
-            logger.info(
-                f"Added reminder role to member: {member.display_name} (ID: {member_id})"
-            )
+            try:
+                await member.add_roles(role, reason="Submission reminder")
+            except Forbidden:
+                forbidden.append(member_id)
         else:
-            logger.warning(f"Member with ID {member_id} not found in the guild.")
+            notfound.append(member_id)
     embed = Embed(
         title="Submission reminder",
         description="Hello 👋,\n\n"
@@ -1089,6 +1091,22 @@ async def submission_reminder(i: Interaction):
         "Thank you for being a part of our community!",
     )
     await i.followup.send(role.mention, embed=embed)
+    if not forbidden and not notfound:
+        await i.followup.send(
+            "✅ Submission reminders sent successfully.", ephemeral=True
+        )
+    else:
+        error_msg = "⚠️ Some submission reminders could not be sent:\n"
+        if forbidden:
+            error_msg += "The bot doesn't have permission to assign the reminder role to the following members:\n"
+            error_msg += f" - <@{'>\n - <@'.join(forbidden)}>\n"
+        if notfound:
+            error_msg += "The following members were not found in the guild:\n"
+            error_msg += f" - <@{'>\n - <@'.join(notfound)}>"
+        await i.followup.send(
+            error_msg,
+            ephemeral=True,
+        )
 
 
 @bot.event
