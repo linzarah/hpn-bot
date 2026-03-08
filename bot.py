@@ -1077,10 +1077,12 @@ async def submission_reminder(i: Interaction):
         f"Found reminder role: {role.name}" if role else "Reminder role not found"
     )
     for member_id in member_ids:
-        member = i.guild.get_member(member_id)
+        member = None
+        with contextlib.suppress(NotFound):
+            member = await i.guild.fetch_member(member_id)
         if member:
             await member.add_roles(role, reason="Submission reminder")
-            logger.warning(
+            logger.info(
                 f"Added reminder role to member: {member.display_name} (ID: {member_id})"
             )
         else:
