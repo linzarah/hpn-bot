@@ -1064,15 +1064,26 @@ async def delete_guild(i: Interaction, guild: str):
     description="Remind guilds that haven't submitted screenshots in the last 15 days"
 )
 async def submission_reminder(i: Interaction):
+    if not is_staff(i):
+        return await i.response.send_message(
+            "❌ You must have 'Manage Server' permission to remind inactive guilds.",
+            ephemeral=True,
+        )
     await i.response.defer()
     member_ids = await get_inactive_members()
     if not member_ids:
         return await i.followup.send("No inactive members found.")
     role = i.guild.get_role(REMINDER_ROLE)
+    logging.warning(
+        f"Found reminder role: {role.name}" if role else "Reminder role not found"
+    )
     for member_id in member_ids:
         member = i.guild.get_member(member_id)
         if member:
             await member.add_roles(role, reason="Submission reminder")
+            logging.warning(
+                f"Added reminder role to member: {member.display_name} (ID: {member_id})"
+            )
         else:
             logging.warning(f"Member with ID {member_id} not found in the guild.")
     embed = Embed(
