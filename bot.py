@@ -67,10 +67,14 @@ MAIN_GUILD = 1325720729240600627
 KUDOS_CHANNEL = 1442610115860631642
 REMINDER_ROLE = 1419076867930984611
 
+intents = Intents.default()
+intents.message_content = True
+intents.members = True
+
 
 class DiscordBot(commands.Bot):
     def __init__(self):
-        super().__init__(command_prefix=commands.when_mentioned, intents=Intents.all())
+        super().__init__(command_prefix=commands.when_mentioned, intents=intents)
 
     async def setup_hook(self) -> None:
         self.add_view(AmendView())
