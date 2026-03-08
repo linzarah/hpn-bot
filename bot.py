@@ -67,13 +67,10 @@ MAIN_GUILD = 1325720729240600627
 KUDOS_CHANNEL = 1442610115860631642
 REMINDER_ROLE = 1419076867930984611
 
-intents = Intents.default()
-intents.message_content = True
-
 
 class DiscordBot(commands.Bot):
     def __init__(self):
-        super().__init__(command_prefix=commands.when_mentioned, intents=intents)
+        super().__init__(command_prefix=commands.when_mentioned, intents=Intents.all())
 
     async def setup_hook(self) -> None:
         self.add_view(AmendView())
@@ -349,11 +346,9 @@ class RemindButton(Button):
             color=Color.orange(),
         )
         for member_id in self.members:
-            try:
-                member = await i.guild.fetch_member(member_id)
-            except NotFound:
-                continue
-            await member.send(embed=embed)
+            user = i.client.get_user(member_id)
+            if user:
+                await user.send(embed=embed)
             await asyncio.sleep(10)
         await start.edit(content="Submission reminders sent successfully ✅")
 
@@ -1074,9 +1069,7 @@ async def submission_reminder(i: Interaction):
         return await i.followup.send("No inactive members found.")
     role = i.guild.get_role(REMINDER_ROLE)
     for member_id in member_ids:
-        member = None
-        with contextlib.suppress(NotFound):
-            member = await i.guild.fetch_member(member_id)
+        member = i.guild.get_member(member_id)
         if member:
             await member.add_roles(role, reason="Submission reminder")
             logger.info(
