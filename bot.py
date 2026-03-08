@@ -1099,10 +1099,10 @@ async def submission_reminder(i: Interaction):
         error_msg = "⚠️ Some submission reminders could not be sent:\n"
         if forbidden:
             error_msg += "The bot doesn't have permission to assign the reminder role to the following members:\n"
-            error_msg += f" - <@{'>\n - <@'.join(forbidden)}>\n"
+            error_msg += f" - <@{'>\n - <@'.join(forbidden[:50])}>\n"
         if notfound:
             error_msg += "The following members were not found in the guild:\n"
-            error_msg += f" - <@{'>\n - <@'.join(notfound)}>"
+            error_msg += f" - <@{'>\n - <@'.join(notfound[:50])}>"
         await i.followup.send(
             error_msg,
             ephemeral=True,
