@@ -1085,10 +1085,10 @@ async def submission_reminder(i: Interaction):
             notfound.append((str(member_id)))
     embed = Embed(
         title="Submission reminder",
-        description="Hello 👋,\n\n"
-        "You haven't submitted screenshots in the last 15 days\n\n"
-        "Please submit screenshots soon, as your guild may receive a strike per our <#1325808876293193790>\n\n"
-        "Thank you for being a part of our community!",
+        description="Our system noticed you haven’t submitted rankings recently.\n"
+        "If you’d like to keep your Elite role, please remember to submit your guild results.\n"
+        "Inactive members may be moved to Casual to keep Elite active.\n"
+        "If your guild is in Royal League or you think this is a mistake, please tag a Mod. Thanks! 🙏",
     )
     await i.followup.send(role.mention, embed=embed)
     if not forbidden and not notfound:
