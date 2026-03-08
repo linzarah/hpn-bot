@@ -26,6 +26,7 @@ from discord import (
 from discord.errors import NotFound
 from discord.ext import commands
 from discord.ui import Button, Modal, Select, TextInput, View, button
+from discord.utils import setup_logging
 from dotenv import load_dotenv
 
 from database import (
@@ -53,13 +54,11 @@ from database import (
 )
 from screenshots import extract_league, extract_war
 
-logging.basicConfig(
-    handlers=(
-        logging.StreamHandler(),
-        logging.FileHandler("error.log"),
-    ),
-    level=logging.info,
-)
+setup_logging()
+logger = logging.getLogger()
+filehandler = logging.FileHandler("error.log")
+filehandler.setLevel(logging.WARNING)
+logger.addHandler(filehandler)
 
 load_dotenv()
 
@@ -80,7 +79,7 @@ class DiscordBot(commands.Bot):
         self.add_view(AmendView())
 
     async def on_ready(self):
-        logging.info(f"Bot started as {self.user} (ID: {self.user.id})")
+        logger.info(f"Bot started as {self.user} (ID: {self.user.id})")
 
 
 bot = DiscordBot()
@@ -511,7 +510,7 @@ class AmendModal(Modal):
         try:
             await edit_label(self.id_, self.label, value)
         except Exception as e:
-            logging.error("FAILED EDIT LABEL", e)
+            logger.error("FAILED EDIT LABEL", e)
             return await i.followup.send("Failed amending data...")
         await i.followup.send(f"{self.label} was updated to {value}")
         n_embed = self.message.embeds[0]
@@ -678,7 +677,7 @@ async def submit(i: Interaction, war: Attachment, league: Attachment):
             submitted_by=i.user.id,
         )
     except Exception as e:
-        logging.error("FAILED EXTRACT OR ADD SUBMISSION", e)
+        logger.error("FAILED EXTRACT OR ADD SUBMISSION", e)
         n = len(os.listdir("fails"))
         await war.save(f"fails/war_error{n}.png")
         await league.save(f"fails/league_error{n}.png")
@@ -1074,18 +1073,18 @@ async def submission_reminder(i: Interaction):
     if not member_ids:
         return await i.followup.send("No inactive members found.")
     role = i.guild.get_role(REMINDER_ROLE)
-    logging.warning(
+    logger.warning(
         f"Found reminder role: {role.name}" if role else "Reminder role not found"
     )
     for member_id in member_ids:
         member = i.guild.get_member(member_id)
         if member:
             await member.add_roles(role, reason="Submission reminder")
-            logging.warning(
+            logger.warning(
                 f"Added reminder role to member: {member.display_name} (ID: {member_id})"
             )
         else:
-            logging.warning(f"Member with ID {member_id} not found in the guild.")
+            logger.warning(f"Member with ID {member_id} not found in the guild.")
     embed = Embed(
         title="Submission reminder",
         description="Hello 👋,\n\n"
@@ -1101,7 +1100,7 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.NotOwner):
         await ctx.send("You don't have permission to use this command.")
     else:
-        logging.error(f"Error in command {ctx.command}: {error}")
+        logger.error(f"Error in command {ctx.command}: {error}")
         traceback.print_exception(type(error), error, error.__traceback__)
         await ctx.send("An error occurred while processing the command.")
 
