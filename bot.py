@@ -1073,9 +1073,6 @@ async def submission_reminder(i: Interaction):
     if not member_ids:
         return await i.followup.send("No inactive members found.")
     role = i.guild.get_role(REMINDER_ROLE)
-    logger.warning(
-        f"Found reminder role: {role.name}" if role else "Reminder role not found"
-    )
     for member_id in member_ids:
         member = None
         with contextlib.suppress(NotFound):
