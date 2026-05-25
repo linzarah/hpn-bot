@@ -1,4 +1,5 @@
 import io
+import json
 import logging
 import re
 from datetime import date
@@ -57,6 +58,8 @@ LEAGUES = {
 
 def extract_war(img_bytes, debug=False):
     panel, W, H = _adjust_screenshot(img_bytes)
+    with open("aliases.json", "r") as f:
+        aliases = json.load(f)
 
     result = {}
     for key, (x1, y1, x2, y2) in WAR_COORDS.items():
@@ -78,6 +81,9 @@ def extract_war(img_bytes, debug=False):
             except Exception as e:
                 logging.error(f"FAILED DATE: {label}", e)
                 data = None
+        elif key == "opponent_guild":
+            if data in aliases:
+                data = aliases[data]
         else:
             data = label
         result[key] = data
