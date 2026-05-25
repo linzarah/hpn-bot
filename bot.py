@@ -35,6 +35,7 @@ from database import (
     add_submission,
     connect_db,
     delete_guild_from_db,
+    delete_member_from_db,
     edit_label,
     get_date,
     get_guild_by_id,
@@ -1054,6 +1055,36 @@ async def delete_guild(i: Interaction, guild: str):
         if not success:
             return await i.followup.send("❌ Guild not found", ephemeral=True)
         await i.followup.send("✅ Guild deleted successfully.")
+    else:
+        await i.followup.send("Operation cancelled ❌")
+
+
+@bot.tree.command(description="Delete a member from the bot")
+@app_commands.describe(member="Select the member to delete")
+async def delete_member(i: Interaction, member: Member):
+    if not is_staff(i):
+        await i.response.send_message(
+            "❌ You must have 'Manage Server' permission to delete a member.",
+            ephemeral=True,
+        )
+        return
+    await i.response.defer()
+
+    view = ConfirmView()
+    await i.followup.send(
+        f"Are you sure you want to delete {member.mention} from the bot?", view=view
+    )
+    await view.wait()
+
+    if view.value is None:
+        await i.followup.send("⏳ Timed out, no response.")
+    elif view.value:
+        success = await delete_member_from_db(member.id)
+        if not success:
+            return await i.followup.send(
+                "❌ Member not found in the database", ephemeral=True
+            )
+        await i.followup.send(f"✅ {member.mention} deleted successfully.")
     else:
         await i.followup.send("Operation cancelled ❌")
 
