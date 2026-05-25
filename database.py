@@ -384,13 +384,3 @@ async def delete_guild_from_db(guild_id):
                 (guild_id,),
             )
             return cursor.rowcount > 0
-
-
-async def delete_member_from_db(user_id):
-    async with pool.acquire() as conn:
-        async with conn.cursor() as cursor:
-            await cursor.execute(
-                "DELETE FROM members WHERE user_id = %s",
-                (user_id,),
-            )
-            return cursor.rowcount > 0
