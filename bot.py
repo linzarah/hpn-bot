@@ -770,7 +770,7 @@ def get_records_summary(data, opponent=False):
     last_5 = []
     for n, row in enumerate(data):
         _, _, scored, _, date, result = row
-        points += scored
+        points += scored or 0
         season = f"`{str(date)[:-3]}`"
         if season not in seasons:
             seasons.append(season)
