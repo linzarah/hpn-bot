@@ -60,6 +60,15 @@ async def get_opponent_guilds_from_name(current):
             return await cursor.fetchall()
 
 
+async def get_opponent_guild_names():
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                "SELECT DISTINCT opponent_guild, opponent_server FROM submissions LIMIT 25"
+            )
+            return await cursor.fetchall()
+
+
 async def get_guild_by_id(guild):
     async with pool.acquire() as conn:
         async with conn.cursor() as cursor:
@@ -358,6 +367,19 @@ async def rename_guild(guild_id, new_name):
                 (
                     new_name,
                     guild_id,
+                ),
+            )
+            return cursor.rowcount > 0
+
+
+async def rename_opponent_guild(old_name, new_name):
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                "UPDATE submissions SET opponent_guild = %s WHERE opponent_guild = %s",
+                (
+                    new_name,
+                    old_name,
                 ),
             )
             return cursor.rowcount > 0

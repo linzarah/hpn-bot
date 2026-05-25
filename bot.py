@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import csv
 import io
+import json
 import logging
 import os
 import traceback
@@ -45,11 +46,13 @@ from database import (
     get_latest_date,
     get_leaderboard,
     get_missing_submissions,
+    get_opponent_guild_names,
     get_opponent_guilds_from_name,
     get_records_data,
     give_kudo_and_get_guild_info,
     remove_inactive_members,
     rename_guild,
+    rename_opponent_guild,
     reset_guild_server,
 )
 from screenshots import extract_league, extract_war
@@ -833,6 +836,72 @@ async def check_opponent(i: Interaction, guild: str, season: str = None):
         opponent=True,
     )
     await paginator.send_message(i)
+
+
+@bot.tree.command(description="View a list of all opponent guild names")
+async def opponent_guilds(i: Interaction):
+    await i.response.defer()
+    data = await get_opponent_guild_names()
+    if not data:
+        return await i.followup.send("No opponent guilds found.")
+    formatted_guilds = "\n".join(
+        [f"{guild_name} (S{server_number})" for guild_name, server_number in data]
+    )
+    embed = Embed(
+        title="Opponent Guilds",
+        description=formatted_guilds,
+        color=Color.blue(),
+    )
+    await i.followup.send(embed=embed)
+
+
+@bot.tree.command(description="Add an alias for an opponent guild")
+@app_commands.autocomplete(guild=opponent_guild_autocomplete)
+@app_commands.describe(guild="Select the guild", alias="Enter the alias for the guild")
+async def add_opponent_alias(i: Interaction, guild: str, alias: str):
+    await i.response.defer()
+    with open("aliases.json", "r") as f:
+        aliases = json.load(f)
+    guild_name = guild.split("///")[0]
+    aliases[alias] = guild_name
+    with open("aliases.json", "w") as f:
+        json.dump(aliases, f)
+    await rename_opponent_guild(alias, guild_name)
+    await i.followup.send(f"Alias '{alias}' added for guild {guild}.")
+
+
+@bot.tree.command(description="Remove an opponent guild alias")
+@app_commands.describe(alias="Enter the alias to remove")
+async def remove_opponent_alias(i: Interaction, alias: str):
+    await i.response.defer()
+    with open("aliases.json", "r") as f:
+        aliases = json.load(f)
+    if alias not in aliases:
+        return await i.followup.send(f"Alias '{alias}' not found.")
+    guild_name = aliases.pop(alias)
+    with open("aliases.json", "w") as f:
+        json.dump(aliases, f)
+    await i.followup.send(f"Alias '{alias}' removed for {guild_name}.")
+
+
+@bot.tree.command(description="View an opponent guild's aliases")
+@app_commands.autocomplete(guild=opponent_guild_autocomplete)
+@app_commands.describe(guild="Select the guild")
+async def view_opponent_aliases(i: Interaction, guild: str):
+    await i.response.defer()
+    guild_name = guild.split("///")[0]
+    with open("aliases.json", "r") as f:
+        aliases = json.load(f)
+    guild_aliases = [alias for alias, name in aliases.items() if name == guild_name]
+    if not guild_aliases:
+        return await i.followup.send(f"No aliases found for guild {guild}.")
+    formatted_aliases = "\n".join(guild_aliases)
+    embed = Embed(
+        title=f"Aliases for {guild_name}",
+        description=formatted_aliases,
+        color=Color.blue(),
+    )
+    await i.followup.send(embed=embed)
 
 
 @bot.tree.command(description="Check your guild stats")
