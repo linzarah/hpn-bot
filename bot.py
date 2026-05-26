@@ -867,7 +867,7 @@ async def add_opponent_alias(i: Interaction, guild: str, alias: str):
     with open("aliases.json", "w") as f:
         json.dump(aliases, f)
     await rename_opponent_guild(alias, guild_name)
-    await i.followup.send(f"Alias '{alias}' added for guild {guild}.")
+    await i.followup.send(f"Alias '{alias}' added for guild {guild_name}.")
 
 
 @bot.tree.command(description="Remove an opponent guild alias")
@@ -894,7 +894,7 @@ async def view_opponent_aliases(i: Interaction, guild: str):
         aliases = json.load(f)
     guild_aliases = [alias for alias, name in aliases.items() if name == guild_name]
     if not guild_aliases:
-        return await i.followup.send(f"No aliases found for guild {guild}.")
+        return await i.followup.send(f"No aliases found for guild {guild_name}.")
     formatted_aliases = "\n".join(guild_aliases)
     embed = Embed(
         title=f"Aliases for {guild_name}",
