@@ -81,9 +81,8 @@ def extract_war(img_bytes, debug=False):
             except Exception as e:
                 logging.error(f"FAILED DATE: {label}", e)
                 data = None
-        elif key == "opponent_guild":
-            if data in aliases:
-                data = aliases[data]
+        elif key == "opponent_guild" and data in aliases:
+            data = aliases[data]
         else:
             data = label
         result[key] = data
