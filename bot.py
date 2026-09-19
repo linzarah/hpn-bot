@@ -9,27 +9,6 @@ import traceback
 from datetime import date, datetime, timedelta
 from typing import Literal
 
-from dateutil.relativedelta import relativedelta
-from discord import (
-    Attachment,
-    ButtonStyle,
-    Color,
-    Embed,
-    File,
-    Intents,
-    Interaction,
-    Member,
-    Message,
-    Object,
-    SelectOption,
-    app_commands,
-)
-from discord.errors import Forbidden, NotFound
-from discord.ext import commands
-from discord.ui import Button, Modal, Select, TextInput, View, button
-from discord.utils import setup_logging
-from dotenv import load_dotenv
-
 from database import (
     add_guild,
     add_member,
@@ -50,11 +29,31 @@ from database import (
     get_opponent_guilds_from_name,
     get_records_data,
     give_kudo_and_get_guild_info,
-    remove_inactive_members,
+    remove_member,
     rename_guild,
     rename_opponent_guild,
     reset_guild_server,
 )
+from dateutil.relativedelta import relativedelta
+from discord import (
+    Attachment,
+    ButtonStyle,
+    Color,
+    Embed,
+    File,
+    Intents,
+    Interaction,
+    Member,
+    Message,
+    Object,
+    SelectOption,
+    app_commands,
+)
+from discord.errors import Forbidden, NotFound
+from discord.ext import commands
+from discord.ui import Button, Modal, Select, TextInput, View, button
+from discord.utils import setup_logging
+from dotenv import load_dotenv
 from screenshots import extract_league, extract_war
 
 setup_logging()
@@ -638,23 +637,11 @@ async def register_member(i: Interaction, guild: str, member: Member):
     )
 
 
-@bot.tree.command(description="Remove members that left the server from the database")
-async def purge_inactive_members(i: Interaction):
-    await i.response.defer()
-    if not is_staff(i):
-        return await i.followup.send(
-            "❌ You must have 'Manage Server' permission to purge inactive members.",
-            ephemeral=True,
-        )
-    guild = bot.get_guild(MAIN_GUILD)
-    if guild is None:
-        return await i.followup.send(
-            "❌ Could not find the main guild.",
-            ephemeral=True,
-        )
-    active_user_ids = [member.id async for member in guild.fetch_members(limit=None)]
-    await remove_inactive_members(active_user_ids)
-    await i.followup.send("✅ Inactive members removed successfully.")
+@bot.event
+async def on_member_remove(member: Member):
+    if member.guild.id != MAIN_GUILD:
+        return
+    await remove_member(member.id)
 
 
 @bot.tree.command(description="Submit screenshots to register results")

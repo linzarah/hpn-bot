@@ -1,4 +1,5 @@
 import os
+import subprocess
 from datetime import datetime
 
 import aiomysql
@@ -109,13 +110,12 @@ async def add_member(member, guild_id):
             )
 
 
-async def remove_inactive_members(active_user_ids):
+async def remove_member(member_id):
     async with pool.acquire() as conn:
         async with conn.cursor() as cursor:
             await cursor.execute(
-                """DELETE FROM members
-                WHERE user_id NOT IN (%s)""",
-                (",".join(str(uid) for uid in active_user_ids),),
+                """DELETE FROM members WHERE user_id = %s""",
+                (member_id,),
             )
 
 
@@ -406,3 +406,35 @@ async def delete_guild_from_db(guild_id):
                 (guild_id,),
             )
             return cursor.rowcount > 0
+
+
+async def export_database():
+    command = [
+        "mysqldump",
+        "-h",
+        os.getenv("DB_HOST"),
+        "-u",
+        os.getenv("DB_USER"),
+        "-p" + os.getenv("DB_PASSWORD"),
+        os.getenv("DB_NAME"),
+    ]
+    try:
+        with open("export.sql", "w", encoding="utf-8") as f:
+            result = subprocess.run(
+                command, stdout=f, stderr=subprocess.PIPE, text=True
+            )
+        if result.returncode == 0:
+            print("Successfully exported database!")
+            return True
+        else:
+            print(f"Error exporting database: {result.stderr}")
+            return False
+
+    except FileNotFoundError:
+        print(
+            "Error: 'mysqldump' command not found. Please ensure MySQL client tools are installed."
+        )
+        return False
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        return False
