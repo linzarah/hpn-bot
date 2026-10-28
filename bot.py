@@ -9,6 +9,27 @@ import traceback
 from datetime import date, datetime, timedelta
 from typing import Literal
 
+from dateutil.relativedelta import relativedelta
+from discord import (
+    Attachment,
+    ButtonStyle,
+    Color,
+    Embed,
+    File,
+    Intents,
+    Interaction,
+    Member,
+    Message,
+    Object,
+    SelectOption,
+    app_commands,
+)
+from discord.errors import Forbidden, NotFound
+from discord.ext import commands
+from discord.ui import Button, Modal, Select, TextInput, View, button
+from discord.utils import setup_logging
+from dotenv import load_dotenv
+
 from database import (
     add_guild,
     add_member,
@@ -34,26 +55,6 @@ from database import (
     rename_opponent_guild,
     reset_guild_server,
 )
-from dateutil.relativedelta import relativedelta
-from discord import (
-    Attachment,
-    ButtonStyle,
-    Color,
-    Embed,
-    File,
-    Intents,
-    Interaction,
-    Member,
-    Message,
-    Object,
-    SelectOption,
-    app_commands,
-)
-from discord.errors import Forbidden, NotFound
-from discord.ext import commands
-from discord.ui import Button, Modal, Select, TextInput, View, button
-from discord.utils import setup_logging
-from dotenv import load_dotenv
 from screenshots import extract_league, extract_war
 
 setup_logging()
@@ -1138,7 +1139,7 @@ async def submission_reminder(i: Interaction):
             except Forbidden:
                 forbidden.append(str(member_id))
         else:
-            notfound.append((str(member_id)))
+            notfound.append(str(member_id))
     embed = Embed(
         title="Submission reminder",
         description="Our system noticed you haven’t submitted rankings recently.\n"
