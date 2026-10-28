@@ -723,7 +723,7 @@ async def season_autocomplete(
 @app_commands.autocomplete(season=season_autocomplete)
 async def export_season(i: Interaction, season: str):
     await i.response.defer()
-    data = export_season_data(season)
+    data = await export_season_data(season)
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(
