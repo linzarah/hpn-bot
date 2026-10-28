@@ -37,6 +37,7 @@ from database import (
     connect_db,
     delete_guild_from_db,
     edit_label,
+    export_season_data,
     get_date,
     get_guild_by_id,
     get_guild_from_member,
@@ -715,6 +716,36 @@ async def season_autocomplete(
     return [
         app_commands.Choice(name=f"{month} season", value=month) for month in months
     ]
+
+
+@bot.tree.command(description="Export a season's raw data")
+@app_commands.describe(season="Choose the season to export (YYYY-mm format)")
+@app_commands.autocomplete(season=season_autocomplete)
+async def export_season(i: Interaction, season: str):
+    await i.response.defer()
+    data = export_season_data(season)
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "points_scored",
+            "guild_name",
+            "server_number",
+            "opponent_guild",
+            "opponent_server",
+            "result",
+            "total_points",
+            "league",
+            "division",
+            "date",
+            "submitted_by",
+        ]
+    )
+    for row in data:
+        writer.writerow(row)
+
+    output.seek(0)
+    await i.followup.send(file=File(fp=output, filename=f"{season}_data.csv"))
 
 
 @bot.tree.command(description="View guilds leaderboard")

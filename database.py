@@ -248,6 +248,35 @@ async def get_latest_date():
             return res[0]
 
 
+async def export_season_data(season: str):
+    async with pool.acquire() as conn, conn.cursor() as cursor:
+        year, month = season.split("-")
+        await cursor.execute(
+            """SELECT 
+                submissions.points_scored,
+                guilds.guild_name,
+                guilds.server_number,
+                submissions.opponent_guild,
+                submissions.opponent_server,
+                submissions.result,
+                submissions.total_points,
+                submissions.league,
+                submissions.division,
+                submissions.date,
+                submissions.submitted_by
+            FROM submissions 
+            JOIN guilds ON submissions.guild_id = guilds.id
+            WHERE submissions.date >= %s AND submissions.date < %s;""",
+            (
+                f"{year}-{month}-01",
+                f"{year}-{int(month) + 1}-01"
+                if int(month) < 12
+                else f"{int(year) + 1}-01-01",
+            ),
+        )
+        return await cursor.fetchall()
+
+
 async def get_records_data(
     guild_data: str | list[str, int], season: str = None, opponent=False
 ):
@@ -272,10 +301,9 @@ async def get_records_data(
 
     query += " ORDER BY date DESC"
 
-    async with pool.acquire() as conn:
-        async with conn.cursor() as cursor:
-            await cursor.execute(query, params)
-            return await cursor.fetchall()
+    async with pool.acquire() as conn, conn.cursor() as cursor:
+        await cursor.execute(query, params)
+        return await cursor.fetchall()
 
 
 async def get_missing_submissions(since):
